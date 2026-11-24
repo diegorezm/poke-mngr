@@ -1,31 +1,732 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   POKEMNGR — C2 POKÉDEX RED EDITION (LIGHT) + C3 SMOKED CARBON (NIGHT)
+   Modern Industrial Neo-Handheld Design System
+   ============================================================================ */
+
+:root {
+  --font-ui: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* C2 — Pokédex Red Edition (Platinum Matte) */
+  --bg-canvas: #e9ecef;
+  --shell-bg: #e9ecef;
+  --shell-rail: #dfe3e8;
+  --panel-bg: #ffffff;
+  --panel-alt: #f4f6f8;
+  --panel-deep: #e2e6ec;
+  --stage-bg: #f1f5f9;
+
+  /* Crisp Hardware Borders & Shadows */
+  --ink: #15181e;
+  --ink-muted: #556070;
+  --ink-subtle: #788496;
+  --border-dark: #1b1f26;
+  --border-mid: #cfd6df;
+  --border-soft: #dce2ea;
+  --hw-shadow: #cbd2da;
+
+  /* Pokédex Hardware Accents */
+  --dex-red: #cf3026;
+  --dex-red-hi: #e2463b;
+  --dex-red-lo: #a92119;
+  --dex-red-soft: #fee2e2;
+  --dex-red-ink: #b91c1c;
+
+  --dex-blue: #1d4ed8;
+  --dex-blue-hi: #3b82f6;
+  --dex-blue-lo: #1e40af;
+
+  --dex-green: #16a34a;
+  --dex-green-hi: #22c55e;
+  --dex-green-lo: #15803d;
+
+  --dex-amber: #d97706;
+  --dex-amber-hi: #f59e0b;
+  --dex-amber-lo: #b45309;
+
+  --dex-purple: #7c3aed;
+
+  /* Semantic Text Accents (High-contrast on Light) */
+  --ink-accent-sky: #1d4ed8;
+  --ink-accent-amber: #b45309;
+  --ink-accent-green: #15803d;
+  --ink-accent-fuchsia: #7e22ce;
+  --ink-accent-rose: #b91c1c;
+  --ink-accent-indigo: #4338ca;
+
+  /* Active Highlight Row */
+  --row-active-bg: #fee2e2;
+  --row-active-border: #c72d23;
+  --row-active-ink: #991b1b;
+}
+
+/* C3 — Smoked Carbon (Dark Industrial Neo-Handheld) */
+[data-theme="night"] {
+  --bg-canvas: #121419;
+  --shell-bg: #121419;
+  --shell-rail: #161920;
+  --panel-bg: #1a1e26;
+  --panel-alt: #13161d;
+  --panel-deep: #222733;
+  --stage-bg: #12151c;
+
+  --ink: #f1f5f9;
+  --ink-muted: #94a3b8;
+  --ink-subtle: #64748b;
+  --border-dark: #303746;
+  --border-mid: #29303d;
+  --border-soft: #242a36;
+  --hw-shadow: #090b0f;
+
+  --dex-red: #dc382c;
+  --dex-red-hi: #ef4444;
+  --dex-red-lo: #b91c1c;
+  --dex-red-soft: rgba(239, 68, 68, 0.16);
+  --dex-red-ink: #fca5a5;
+
+  --ink-accent-sky: #38bdf8;
+  --ink-accent-amber: #fbbf24;
+  --ink-accent-green: #34d399;
+  --ink-accent-fuchsia: #e879f9;
+  --ink-accent-rose: #fb7185;
+  --ink-accent-indigo: #a5b4fc;
+
+  --row-active-bg: #2a1c1e;
+  --row-active-border: #ef4444;
+  --row-active-ink: #fecaca;
+}
+
 @layer base {
-  html, body, #root {
+  html,
+  body,
+  #root {
     height: 100%;
     margin: 0;
-    background-color: #090b14;
-    color: #f1f5f9;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-canvas);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
   }
 
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
   }
   ::-webkit-scrollbar-track {
-    background: #0d101d;
+    background: var(--shell-bg);
   }
   ::-webkit-scrollbar-thumb {
-    background: #232942;
-    border-radius: 9999px;
+    background: var(--border-mid);
+    border: 2px solid var(--shell-bg);
+    border-radius: 999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #333c5e;
+    background: var(--dex-red);
   }
 }
 
 .pixelated {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+
+.font-pixel,
+.font-mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.font-ds {
+  font-family: var(--font-ui);
+}
+
+/* ============================================================================
+   ANIMATIONS — CRISP NEO-HANDHELD MOTION
+   ============================================================================ */
+@keyframes dsTabEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dsCardPop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dsSpriteIdle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes dsBallWobble {
+  0%   { transform: rotate(0deg); }
+  25%  { transform: rotate(-12deg); }
+  55%  { transform: rotate(10deg); }
+  80%  { transform: rotate(-5deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes dsShinyGlint {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.9; }
+  50% { transform: scale(1.18) rotate(10deg); opacity: 1; }
+}
+
+@keyframes dsLedPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+  50% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0); }
+}
+
+@keyframes dsLensGlow {
+  0%, 100% { box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.7), 0 0 0 0 rgba(56, 189, 248, 0.45); }
+  50% { box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.85), 0 0 10px 1px rgba(56, 189, 248, 0.55); }
+}
+
+.animate-ds-tab {
+  animation: dsTabEnter 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-ds-card {
+  animation: dsCardPop 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-ds-idle {
+  animation: dsSpriteIdle 2.5s ease-in-out infinite;
+}
+
+.animate-ds-shiny {
+  animation: dsShinyGlint 1.8s ease-in-out infinite;
+}
+
+.animate-ds-led {
+  animation: dsLedPulse 2.2s ease-in-out infinite;
+}
+
+.group:hover .group-hover-wobble {
+  animation: dsBallWobble 0.42s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ds-tab,
+  .animate-ds-card,
+  .animate-ds-idle,
+  .animate-ds-shiny,
+  .animate-ds-led,
+  .group:hover .group-hover-wobble {
+    animation: none !important;
+  }
+}
+
+/* ============================================================================
+   HARDWARE SURFACES, KEYCAPS, RIBBONS, BARS & BADGES
+   ============================================================================ */
+.px-box {
+  background: var(--panel-bg);
+  border: 1.5px solid var(--border-dark);
+  border-radius: 12px;
+  box-shadow: 0 3px 0 var(--hw-shadow);
+}
+
+.px-inset {
+  background: var(--panel-alt);
+  border: 1px solid var(--border-mid);
+  border-radius: 9px;
+}
+
+.px-stage {
+  background: var(--stage-bg);
+  border: 1.5px solid var(--border-dark);
+  border-radius: 10px;
+}
+
+.ds-input {
+  background-color: var(--panel-bg);
+  color: var(--ink);
+  border: 1.5px solid var(--border-dark);
+  border-radius: 8px;
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.ds-input:focus {
+  outline: none;
+  border-color: var(--dex-red);
+  box-shadow: 0 0 0 3px rgba(207, 48, 38, 0.18);
+}
+
+/* Pokédex Camera Lens + RGB Mini LEDs */
+.pokedex-lens {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2.5px solid #ffffff;
+  outline: 2px solid #1b1f26;
+  background: radial-gradient(circle at 34% 32%, #bae6fd 0%, #38bdf8 34%, #0284c7 76%, #0369a1 100%);
+  animation: dsLensGlow 3.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.mini-ball {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid #1b1f26;
+  background: linear-gradient(180deg, #e04338 0 46%, #1b1f26 46% 54%, #ffffff 54% 100%);
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.mini-ball::after {
+  content: "";
+  position: absolute;
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid #1b1f26;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Tactile Industrial Hardware Buttons */
+.ds-btn {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  border: 1.5px solid var(--border-dark);
+  border-radius: 8px;
+  padding: 7px 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 2px 0 var(--border-dark);
+  transition: transform 0.08s ease, filter 0.12s ease, box-shadow 0.08s ease;
+  user-select: none;
+}
+.ds-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 var(--border-dark);
+}
+.ds-btn:active:not(:disabled) {
+  transform: translateY(1.5px);
+  box-shadow: 0 0 0 var(--border-dark);
+}
+.ds-btn:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.ds-btn-red {
+  background: linear-gradient(180deg, var(--dex-red-hi) 0%, var(--dex-red) 100%);
+  color: #ffffff;
+}
+.ds-btn-blue {
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+}
+.ds-btn-green {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  color: #ffffff;
+}
+.ds-btn-orange {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  color: #ffffff;
+}
+.ds-btn-cyan {
+  background: linear-gradient(180deg, #06b6d4 0%, #0891b2 100%);
+  color: #ffffff;
+}
+.ds-btn-slate {
+  background: var(--panel-bg);
+  color: var(--ink);
+  box-shadow: 0 2px 0 var(--hw-shadow);
+}
+.ds-btn-slate:hover:not(:disabled) {
+  background: var(--panel-alt);
+  filter: none;
+  box-shadow: 0 3px 0 var(--hw-shadow);
+}
+.ds-btn-sm {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 7px;
+}
+
+/* Accessible Headless UI Tab Button (Light & Carbon Dark safe) */
+.ds-tab-btn {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border-dark);
+  background: var(--panel-bg);
+  color: var(--ink);
+  box-shadow: 0 2px 0 var(--hw-shadow);
+  cursor: pointer;
+  transition: transform 0.08s ease, background-color 0.12s ease, color 0.12s ease;
+}
+.ds-tab-btn:hover {
+  background: var(--panel-alt);
+}
+.ds-tab-btn[data-selected] {
+  background: linear-gradient(180deg, var(--dex-red-hi) 0%, var(--dex-red) 100%);
+  color: #ffffff;
+  border-color: #1b1f26;
+  box-shadow: 0 2px 0 #1b1f26;
+}
+
+/* Header Bezel Ribbons */
+.ds-ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border-dark);
+  border-radius: 12px;
+  color: #ffffff;
+  box-shadow: 0 3px 0 var(--hw-shadow);
+}
+.ds-ribbon-red    { background: linear-gradient(180deg, #e04338 0%, #c72d23 100%); }
+.ds-ribbon-orange { background: linear-gradient(180deg, #e04338 0%, #c72d23 100%); }
+.ds-ribbon-green  { background: linear-gradient(180deg, #1e2430 0%, #151922 100%); }
+.ds-ribbon-blue   { background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%); }
+.ds-ribbon-purple { background: linear-gradient(180deg, #7c3aed 0%, #6d28d9 100%); }
+.ds-ribbon-slate  { background: linear-gradient(180deg, #262c38 0%, #1b1f28 100%); }
+
+.ds-ribbon-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Crisp Modern Industrial Type Badges */
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ffffff;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  line-height: 1.2;
+}
+.t-FIGHTING, .t-FIGHT  { background: #c53028; }
+.t-FIRE                { background: #ea580c; }
+.t-ELECTRIC, .t-ELECTR { background: #ca8a04; }
+.t-BUG                 { background: #65a30d; }
+.t-GRASS               { background: #16a34a; }
+.t-ICE                 { background: #0891b2; }
+.t-WATER               { background: #2563eb; }
+.t-DRAGON              { background: #6d28d9; }
+.t-GHOST               { background: #5b21b6; }
+.t-POISON              { background: #9333ea; }
+.t-PSYCHIC, .t-PSYCHC  { background: #db2777; }
+.t-FLYING              { background: #6366f1; }
+.t-STEEL               { background: #64748b; }
+.t-NORMAL              { background: #71717a; }
+.t-GROUND              { background: #b45309; }
+.t-ROCK                { background: #854d0e; }
+.t-DARK                { background: #3f3f46; }
+.t-FAIRY               { background: #ec4899; }
+
+/* Sleek Industrial HP / EXP Bars */
+.ds-bar-track {
+  height: 8px;
+  background: var(--panel-deep);
+  border: 1px solid var(--border-mid);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.ds-bar-inner {
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+.ds-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.fill-hp-high { background: linear-gradient(90deg, #16a34a, #22c55e); }
+.fill-hp-mid  { background: linear-gradient(90deg, #d97706, #f59e0b); }
+.fill-hp-low  { background: linear-gradient(90deg, #dc2626, #ef4444); }
+.fill-exp     { background: linear-gradient(90deg, #2563eb, #38bdf8); }
+.fill-gold    { background: linear-gradient(90deg, #d97706, #facc15); }
+
+/* Hardware Trainer Account Card (C2 / C3) */
+.hw-card {
+  background: var(--panel-bg);
+  border: 1.5px solid var(--border-dark);
+  border-radius: 12px;
+  box-shadow: 0 3px 0 var(--hw-shadow);
+  overflow: hidden;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.hw-card:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 5px 0 var(--hw-shadow);
+}
+
+.equip-keycap {
+  background: var(--panel-alt);
+  border: 1.5px solid var(--border-dark);
+  border-radius: 8px;
+  box-shadow: 0 2px 0 var(--hw-shadow);
+  transition: transform 0.08s ease, background-color 0.12s ease;
+}
+.equip-keycap:hover:not(:disabled) {
+  background: var(--panel-bg);
+  transform: translateY(-1px);
+}
+.equip-keycap:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+/* Pokédex Hunt List Row */
+.dex-row {
+  background: var(--panel-alt);
+  border: 1px solid var(--border-mid);
+  border-radius: 9px;
+  transition: transform 0.1s ease, border-color 0.1s ease, background-color 0.1s ease;
+}
+.dex-row:hover {
+  border-color: var(--border-dark);
+  transform: translateX(2px);
+}
+.dex-row-active {
+  background: var(--row-active-bg) !important;
+  border: 1.5px solid var(--row-active-border) !important;
+  box-shadow: 0 2px 0 var(--hw-shadow);
+}
+
+/* Skills Summary Tabs */
+.skills-tab {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(15, 20, 28, 0.25);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.skills-tab:hover {
+  background: rgba(15, 20, 28, 0.42);
+  color: #ffffff;
+}
+.skills-tab[data-selected],
+.skills-tab.active {
+  background: #ffffff;
+  color: #b91c1c;
+  border-color: #1b1f26;
+  box-shadow: 0 2px 0 rgba(20, 24, 30, 0.25);
+}
+
+/* Sidebar */
+.ds-sidebar {
+  background: var(--shell-rail);
+  border-right: 1.5px solid var(--border-dark);
+}
+
+/* Modern Pokédex Alert Toast */
+.poke-toast {
+  background: var(--panel-bg);
+  color: var(--ink);
+  border: 1.5px solid var(--border-dark);
+  border-left: 5px solid var(--dex-red);
+  border-radius: 10px;
+  padding: 11px 16px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 24px rgba(15, 20, 28, 0.24), 0 3px 0 var(--hw-shadow);
+}
+
+/* ============================================================================
+   SEAMLESS C2 / C3 SKIN FOR EXTENDED VIEWS (Market, PvP, Pass, Lives, Chat, Config)
+   ============================================================================ */
+.ds-themed-view .bg-\[\#111525\],
+.ds-themed-view .bg-\[\#111525\]\/90,
+.ds-themed-view .bg-\[\#15182c\],
+.ds-themed-view .bg-\[\#151a2e\],
+.ds-themed-view .bg-\[\#161b30\],
+.ds-themed-view .bg-\[\#0d1224\] {
+  background-color: var(--panel-bg) !important;
+  border-color: var(--border-dark) !important;
+  border-width: 1.5px !important;
+  box-shadow: 0 3px 0 var(--hw-shadow);
+}
+
+.ds-themed-view .bg-\[\#0b0e1b\],
+.ds-themed-view .bg-\[\#0d101d\],
+.ds-themed-view .bg-\[\#090c18\],
+.ds-themed-view .bg-\[\#0a0d18\],
+.ds-themed-view .bg-\[\#0d1122\],
+.ds-themed-view .bg-\[\#161224\] {
+  background-color: var(--panel-alt) !important;
+  border-color: var(--border-mid) !important;
+}
+
+.ds-themed-view .bg-slate-800,
+.ds-themed-view .bg-slate-800\/80,
+.ds-themed-view .bg-slate-800\/70,
+.ds-themed-view .bg-slate-900,
+.ds-themed-view .bg-slate-900\/70,
+.ds-themed-view .bg-slate-900\/50 {
+  background-color: var(--panel-deep) !important;
+  border-color: var(--border-mid) !important;
+}
+
+.ds-themed-view .border-slate-800,
+.ds-themed-view .border-slate-800\/80,
+.ds-themed-view .border-slate-800\/70,
+.ds-themed-view .border-slate-700,
+.ds-themed-view .border-slate-700\/70 {
+  border-color: var(--border-mid) !important;
+}
+
+.ds-themed-view .divide-slate-800\/70 > :not(:first-child),
+.ds-themed-view .divide-slate-800 > :not(:first-child) {
+  border-color: var(--border-mid) !important;
+}
+
+.ds-themed-view .text-white,
+.ds-themed-view .text-slate-100,
+.ds-themed-view .text-slate-200 {
+  color: var(--ink) !important;
+}
+
+.ds-themed-view .hover\:text-white:hover,
+.ds-themed-view .hover\:text-slate-100:hover,
+.ds-themed-view .hover\:text-slate-200:hover {
+  color: var(--ink) !important;
+}
+
+.ds-themed-view .hover\:bg-slate-800:hover,
+.ds-themed-view .hover\:bg-slate-800\/60:hover,
+.ds-themed-view .hover\:bg-slate-700:hover {
+  background-color: var(--panel-deep) !important;
+}
+
+.ds-themed-view button.bg-indigo-500,
+.ds-themed-view button.bg-emerald-500,
+.ds-themed-view button.bg-amber-500,
+.ds-themed-view button.bg-rose-500,
+.ds-themed-view .ds-btn-red,
+.ds-themed-view .ds-btn-blue,
+.ds-themed-view .ds-btn-green,
+.ds-themed-view .ds-btn-orange,
+.ds-themed-view .ds-btn-cyan,
+.ds-themed-view .ds-tab-btn[data-selected] {
+  color: #ffffff !important;
+  border: 1.5px solid var(--border-dark) !important;
+  box-shadow: 0 2px 0 var(--border-dark);
+}
+.ds-themed-view button.bg-indigo-500:hover,
+.ds-themed-view button.bg-emerald-500:hover,
+.ds-themed-view button.bg-amber-500:hover,
+.ds-themed-view button.bg-rose-500:hover {
+  color: #ffffff !important;
+  filter: brightness(1.06);
+}
+.ds-themed-view button.bg-indigo-500 {
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%) !important;
+}
+.ds-themed-view button.bg-emerald-500 {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%) !important;
+}
+.ds-themed-view button.bg-amber-500 {
+  background: linear-gradient(180deg, var(--dex-red-hi) 0%, var(--dex-red) 100%) !important;
+}
+
+.ds-themed-view .text-slate-300,
+.ds-themed-view .text-slate-400 {
+  color: var(--ink-muted) !important;
+}
+.ds-themed-view .text-slate-500 {
+  color: var(--ink-subtle) !important;
+}
+.ds-themed-view .text-amber-300,
+.ds-themed-view .text-amber-200,
+.ds-themed-view .text-amber-400,
+.ds-themed-view .text-yellow-300 {
+  color: var(--ink-accent-amber) !important;
+}
+.ds-themed-view .text-sky-300,
+.ds-themed-view .text-sky-200,
+.ds-themed-view .text-sky-400,
+.ds-themed-view .text-cyan-300 {
+  color: var(--ink-accent-sky) !important;
+}
+.ds-themed-view .text-emerald-300,
+.ds-themed-view .text-emerald-200,
+.ds-themed-view .text-emerald-400 {
+  color: var(--ink-accent-green) !important;
+}
+.ds-themed-view .text-fuchsia-300,
+.ds-themed-view .text-fuchsia-200,
+.ds-themed-view .text-fuchsia-400,
+.ds-themed-view .text-purple-300,
+.ds-themed-view .text-purple-200,
+.ds-themed-view .text-purple-400 {
+  color: var(--ink-accent-fuchsia) !important;
+}
+.ds-themed-view .text-rose-300,
+.ds-themed-view .text-rose-200,
+.ds-themed-view .text-rose-400 {
+  color: var(--ink-accent-rose) !important;
+}
+.ds-themed-view .text-indigo-200,
+.ds-themed-view .text-indigo-300,
+.ds-themed-view .text-indigo-400 {
+  color: var(--ink-accent-indigo) !important;
+}
+
+.ds-themed-view input,
+.ds-themed-view select,
+.ds-themed-view textarea {
+  background-color: var(--panel-bg) !important;
+  color: var(--ink) !important;
+  border: 1.5px solid var(--border-dark) !important;
+  border-radius: 8px !important;
+}
+.ds-themed-view input:focus,
+.ds-themed-view select:focus,
+.ds-themed-view textarea:focus {
+  outline: none;
+  border-color: var(--dex-red) !important;
+  box-shadow: 0 0 0 3px rgba(207, 48, 38, 0.16);
 }

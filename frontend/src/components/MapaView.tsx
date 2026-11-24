@@ -5,7 +5,6 @@ import { api } from "../lib/api";
 import {
   REGION_ORDER,
   TYPES,
-  TYPE_COLOR,
   effectiveness,
   matchup,
 } from "../lib/gameData";
@@ -16,6 +15,7 @@ import {
 } from "../lib/huntAdvisor";
 import { BestHuntCard } from "./BestHuntCard";
 import { PokemonSprite } from "./PokemonSprite";
+import { DsTypeBadge, MiniBall } from "./DsPrimitives";
 
 export function MapaView({
   accounts,
@@ -81,7 +81,8 @@ export function MapaView({
 
   const regionCounts: Record<string, number> = {};
   for (const h of catalog?.hunts || []) {
-    regionCounts[h.regiao] = (regionCounts[h.regiao] || 0) + 1;
+    const regKey = h.regiao;
+    regionCounts[regKey] = (regionCounts[regKey] || 0) + 1;
   }
   const availableRegions = REGION_ORDER.filter((r) => regionCounts[r.id] > 0).map((r) => ({
     ...r,
@@ -123,15 +124,22 @@ export function MapaView({
   const inspected: HuntInfo | undefined = (catalog?.hunts || []).find(
     (h) => h.slug === inspectedSlug
   );
+  const inspectedSim = inspected ? calcBySlug.get(inspected.slug) : undefined;
+  const inspectedLocked = inspected
+    ? inspected.nivelNecessario > (catalog?.accountLevel || 0)
+    : false;
+  const inspectedActive = inspected ? catalog?.activeSlug === inspected.slug : false;
 
   const handleSelectHunt = async (h: HuntInfo) => {
     if (!activeAccId) return;
+    const accNick = activeAcc?.nick || "";
     const msg =
       catalog && catalog.combatLockMs > 0
-        ? `${activeAcc?.nick}: ${h.nome} enfileirada após trava de combate`
-        : `${activeAcc?.nick}: indo caçar em ${h.nome}`;
+        ? `${accNick}: ${h.nome} enfileirada após trava de combate`
+        : `${accNick}: indo caçar em ${h.nome}`;
+    const slug = h.slug;
     try {
-      await api.selectHunt(activeAccId, h.slug);
+      await api.selectHunt(activeAccId, slug);
       onToast(msg);
       refresh();
     } catch (e) {
@@ -141,7 +149,7 @@ export function MapaView({
 
   const handleTier = async (tier: number) => {
     if (!activeAccId) return;
-    const nick = activeAcc?.nick;
+    const nick = activeAcc?.nick || "";
     try {
       await api.selectOutlandTier(activeAccId, tier);
       onToast(`${nick}: Outland Tier ${tier} selecionado`);
@@ -153,7 +161,7 @@ export function MapaView({
 
   if (accounts.length === 0) {
     return (
-      <div className="rounded-2xl bg-[#111525] border border-slate-800 p-10 text-center text-sm text-slate-400 max-w-lg mx-auto mt-10">
+      <div className="px-box p-10 text-center text-sm text-[var(--ink-muted)] font-medium max-w-lg mx-auto mt-10">
         Adicione uma conta para explorar o Mapa e trocar hunts remotamente.
       </div>
     );
@@ -161,60 +169,392 @@ export function MapaView({
 
   return (
     <div className="space-y-4">
-      {/* Top Bar: Account Selector + Filters */}
-      <div className="rounded-2xl bg-[#111525] border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-slate-400">Conta:</span>
-          {accounts.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => setSelectedAccId(a.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
-                activeAccId === a.id
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                  : "bg-[#0b0e1b] text-slate-300 border-slate-800 hover:border-slate-700"
-              }`}
-            >
-              {a.nick} <span className="text-slate-500 font-mono">Lv {a.level}</span>
-            </button>
-          ))}
+      {/* Pokédex Red Edition Main Hardware Panel */}
+      <div className="px-box overflow-hidden">
+        {/* Crimson Pokédex Top Bezel + Account Selector */}
+        <div className="bg-gradient-to-b from-[#e04338] to-[#c72d23] border-b-[1.5px] border-[#1b1f26] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="ds-ribbon-pill text-white">
+            <MiniBall />
+            <span>Pokédex · Mapa de Hunts</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {accounts.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => setSelectedAccId(a.id)}
+                className={`text-xs font-bold px-2.5 py-1 rounded-md border transition cursor-pointer ${
+                  activeAccId === a.id
+                    ? "bg-white text-[#b91c1c] border-[#1b1f26] shadow-sm"
+                    : "bg-black/20 text-red-50 border-white/25 hover:bg-black/30"
+                }`}
+              >
+                {a.nick} <span className="font-mono-num opacity-75">Lv.{a.level}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap text-xs">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar hunt ou Pokémon..."
-              className="pl-8 pr-3 py-1.5 rounded-lg bg-[#0b0e1b] border border-slate-700 text-white w-52"
-            />
+        {/* Region Tabs + Search & Filters Bar */}
+        <div className="bg-[var(--panel-alt)] border-b border-[var(--border-mid)] px-4 py-3 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            {/* Region Tabs */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {availableRegions.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => setRegion(r.id)}
+                  className={`text-xs font-bold px-2.5 py-1 rounded-md border transition cursor-pointer ${
+                    region === r.id
+                      ? "bg-[var(--dex-red)] text-white border-[#1b1f26]"
+                      : "bg-[var(--panel-bg)] text-[var(--ink-muted)] border-[var(--border-mid)] hover:text-[var(--ink)] hover:border-[var(--border-dark)]"
+                  }`}
+                >
+                  {r.label} <span className="font-mono-num text-[10px] opacity-75">({r.count})</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Search & Type Filter */}
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-[var(--ink-muted)] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar hunt ou espécie..."
+                  className="ds-input pl-8 pr-3 py-1.5 w-48 text-xs font-medium"
+                />
+              </div>
+              <select
+                value={typeMode}
+                onChange={(e) => setTypeMode(e.target.value as "has" | "weak" | "resist")}
+                className="ds-input px-2 py-1.5 text-xs font-semibold"
+              >
+                <option value="has">Do tipo</option>
+                <option value="weak">Fraco contra</option>
+                <option value="resist">Forte contra</option>
+              </select>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="ds-input px-2 py-1.5 text-xs font-semibold"
+              >
+                <option value="">Todos os tipos</option>
+                {TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <select
-            value={typeMode}
-            onChange={(e) => setTypeMode(e.target.value as "has" | "weak" | "resist")}
-            className="rounded-lg bg-[#0b0e1b] border border-slate-700 px-2 py-1.5 text-slate-200"
-          >
-            <option value="has">Do tipo</option>
-            <option value="weak">Fraco contra</option>
-            <option value="resist">Forte contra</option>
-          </select>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="rounded-lg bg-[#0b0e1b] border border-slate-700 px-2 py-1.5 text-slate-200"
-          >
-            <option value="">Todos os tipos</option>
-            {TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+
+          {/* Outland Tiers Row */}
+          {region === "outland" && catalog && catalog.outlandTiers.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-[var(--border-mid)]">
+              <span className="font-mono-num text-[11px] font-bold text-[var(--ink-accent-fuchsia)] mr-1">
+                OUTLAND TIER:
+              </span>
+              {catalog.outlandTiers.map((t) => {
+                const locked = catalog.accountLevel < t.nivel;
+                const selected = (catalog.outlandTier || 1) === t.tier;
+                return (
+                  <button
+                    key={t.tier}
+                    disabled={locked}
+                    onClick={() => handleTier(t.tier)}
+                    className={`ds-btn ds-btn-sm ${
+                      selected ? "ds-btn-red" : "ds-btn-slate"
+                    }`}
+                  >
+                    {locked && <Lock className="w-3 h-3" />}
+                    T{t.tier} ×{t.mult}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Pending Hunt Queue Banner */}
+        {catalog?.pendingSlug && (
+          <div className="bg-amber-500/15 border-b border-amber-500/35 px-4 py-2 flex items-center justify-between gap-2 text-xs font-semibold text-[var(--ink)]">
+            <span className="inline-flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[var(--ink-accent-amber)]" />
+              Troca agendada para <b>{catalog.pendingSlug}</b> assim que a trava de combate terminar
+              {catalog.combatLockMs > 0 ? ` (~${Math.ceil(catalog.combatLockMs / 1000)}s)` : ""}.
+            </span>
+            <button
+              onClick={() => api.cancelPendingHunt(activeAccId).then(refresh)}
+              className="ds-btn ds-btn-red ds-btn-sm"
+            >
+              <X className="w-3.5 h-3.5" /> Cancelar
+            </button>
+          </div>
+        )}
+
+        {/* Two-Column Content: Hunt List + Sticky Pokédex Analyser */}
+        <div className="p-4 grid grid-cols-1 lg:grid-cols-[1fr_330px] gap-4 items-start">
+          {/* Hunt List */}
+          <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+            {filteredHunts.length === 0 ? (
+              <div className="px-inset p-8 text-center text-xs text-[var(--ink-muted)] font-medium">
+                {catalog?.hunts.length === 0
+                  ? "Aguardando conta conectar para carregar catálogo de hunts..."
+                  : "Nenhuma hunt encontrada com esses filtros."}
+              </div>
+            ) : (
+              filteredHunts.map((h) => {
+                const locked = h.nivelNecessario > (catalog?.accountLevel || 0);
+                const isActive = catalog?.activeSlug === h.slug;
+                const isPending = catalog?.pendingSlug === h.slug;
+                const isSelected = inspected?.slug === h.slug;
+                const sim = calcBySlug.get(h.slug);
+                return (
+                  <div
+                    key={h.slug}
+                    onClick={() => setInspectSlug(h.slug)}
+                    className={`dex-row px-3 py-2.5 flex items-center justify-between gap-3 cursor-pointer ${
+                      isSelected ? "dex-row-active" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <PokemonSprite
+                        looktype={h.mainLook}
+                        bridgePort={bridgePort}
+                        size={40}
+                        className="px-stage shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {sim?.rank && sim.rank <= 3 && (
+                            <span className="font-mono-num text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#1b1f26] text-[#fde047]">
+                              #{sim.rank}
+                            </span>
+                          )}
+                          <span className="font-bold text-sm text-[var(--ink)] truncate">
+                            {h.nome || h.slug}
+                          </span>
+                          <span className="font-mono-num text-[11px] font-semibold text-[var(--ink-muted)]">
+                            Lv {h.nivelMin || h.nivelNecessario}
+                            {h.nivelMax ? `–${h.nivelMax}` : "+"}
+                          </span>
+                          {isActive && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-600 text-white">
+                              Caçando
+                            </span>
+                          )}
+                          {isPending && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-600 text-white">
+                              Na fila
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                          {(h.tipos || []).slice(0, 4).map((t) => (
+                            <DsTypeBadge key={t} type={t} />
+                          ))}
+                          {sim && (
+                            <span className="font-mono-num text-[11px] font-bold text-[var(--ink-accent-sky)]">
+                              {fmtCompact(order === "ouro" ? sim.ouroH : sim.xpH)}{" "}
+                              {order === "ouro" ? "ouro/h" : "XP/h"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      disabled={locked || isActive || activeAcc?.state !== "ONLINE"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectHunt(h);
+                      }}
+                      className={`ds-btn ds-btn-sm shrink-0 ${
+                        locked || isActive ? "ds-btn-slate" : "ds-btn-blue"
+                      }`}
+                    >
+                      {locked ? (
+                        <>
+                          <Lock className="w-3 h-3" /> Lv.{h.nivelNecessario}
+                        </>
+                      ) : isActive ? (
+                        "Ativa"
+                      ) : (
+                        <>
+                          <Play className="w-3 h-3" /> Caçar
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Sticky Pokédex Entry Inspector */}
+          {inspected ? (
+            <div className="px-box p-3.5 space-y-3 lg:sticky lg:top-0">
+              <div className="px-stage h-32 flex flex-col items-center justify-center relative overflow-hidden">
+                {inspectedSim?.rank && (
+                  <span className="absolute top-2 left-2 font-mono-num text-[10px] font-bold bg-[#1b1f26] text-[#fde047] px-2 py-0.5 rounded">
+                    #{inspectedSim.rank} ADVISOR
+                  </span>
+                )}
+                {inspectedSim?.umHit && (
+                  <span className="absolute top-2 right-2 font-mono-num text-[10px] font-bold bg-[#16a34a] text-white px-2 py-0.5 rounded">
+                    1-HIT KO
+                  </span>
+                )}
+                <div className="animate-ds-idle">
+                  <PokemonSprite
+                    looktype={inspected.mainLook}
+                    bridgePort={bridgePort}
+                    size={72}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-bold text-base text-[var(--ink)] leading-tight">
+                    {inspected.nome || inspected.slug}
+                  </h3>
+                  <span className="font-mono-num text-[11px] font-bold bg-[#1b1f26] text-[#fde047] px-2 py-0.5 rounded shrink-0">
+                    Lv {inspected.nivelMin || inspected.nivelNecessario}
+                    {inspected.nivelMax ? `–${inspected.nivelMax}` : "+"}
+                  </span>
+                </div>
+
+                {(inspected.tipos || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(inspected.tipos || []).slice(0, 5).map((t) => (
+                      <DsTypeBadge key={t} type={t} />
+                    ))}
+                  </div>
+                )}
+
+                {inspectedSim && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="px-inset px-2.5 py-1.5">
+                      <div className="text-[10px] font-bold uppercase text-[var(--ink-muted)]">
+                        Est. XP/h
+                      </div>
+                      <div className="font-mono-num text-sm font-bold text-[var(--ink-accent-sky)]">
+                        {fmtCompact(inspectedSim.xpH)}
+                      </div>
+                    </div>
+                    <div className="px-inset px-2.5 py-1.5">
+                      <div className="text-[10px] font-bold uppercase text-[var(--ink-muted)]">
+                        Est. Ouro/h
+                      </div>
+                      <div className="font-mono-num text-sm font-bold text-[var(--ink-accent-amber)]">
+                        {fmtCompact(inspectedSim.ouroH)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  disabled={inspectedLocked || inspectedActive || activeAcc?.state !== "ONLINE"}
+                  onClick={() => handleSelectHunt(inspected)}
+                  className={`w-full ds-btn ${
+                    inspectedActive || inspectedLocked ? "ds-btn-slate" : "ds-btn-red"
+                  }`}
+                >
+                  {inspectedLocked ? (
+                    <>
+                      <Lock className="w-3.5 h-3.5" /> Requer Lv {inspected.nivelNecessario}
+                    </>
+                  ) : inspectedActive ? (
+                    "Caçando aqui"
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5" /> Ir caçar aqui
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Matchup Summary */}
+              {(inspected.tipos || []).length > 0 && (() => {
+                const m = matchup((inspected.tipos || []).slice(0, 2));
+                return (
+                  <div className="space-y-1.5 text-xs pt-2 border-t border-[var(--border-mid)]">
+                    <div className="font-bold text-[11px] uppercase tracking-wider text-[var(--ink-accent-rose)] flex items-center gap-1">
+                      <Flame className="w-3.5 h-3.5" /> Fraquezas
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {m.weak.slice(0, 6).map((w) => (
+                        <DsTypeBadge key={w.type} type={w.type} suffix={`×${w.mult}`} />
+                      ))}
+                    </div>
+                    <div className="font-bold text-[11px] uppercase tracking-wider text-[var(--ink-accent-sky)] flex items-center gap-1 pt-1">
+                      <Shield className="w-3.5 h-3.5" /> Resistências
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {m.resist.slice(0, 6).map((r) => (
+                        <DsTypeBadge key={r.type} type={r.type} suffix={`×${r.mult}`} className="opacity-85" />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Species list */}
+              {inspected.especies && inspected.especies.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t border-[var(--border-mid)]">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--ink-muted)]">
+                    Espécies ({inspected.especies.length})
+                  </div>
+                  <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                    {inspected.especies.map((sp, i) => (
+                      <div
+                        key={`${sp.pokeId}-${i}`}
+                        className="px-inset px-2.5 py-1.5 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <PokemonSprite looktype={sp.looktype} bridgePort={bridgePort} size={24} />
+                          <span className="font-semibold text-[var(--ink)] truncate">{sp.nome}</span>
+                        </div>
+                        <span className="font-mono-num text-[11px] text-[var(--ink-muted)]">
+                          {sp.nivelMin ? `Lv.${sp.nivelMin}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Drops */}
+              {inspected.drops && inspected.drops.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t border-[var(--border-mid)]">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--ink-muted)]">
+                    Drops
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {inspected.drops.map((d) => (
+                      <span
+                        key={d}
+                        className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-[var(--ink-accent-amber)] border border-amber-500/30"
+                      >
+                        {d}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="px-inset p-6 text-center text-xs text-[var(--ink-muted)] font-medium">
+              Selecione uma hunt na lista ao lado para inspecionar.
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Best Hunt Advisor Card (XP/h or Ouro/h via PokéIdle Hub) */}
+      {/* Best Hunt Advisor Card */}
       {activeAcc && (
         <BestHuntCard
           nick={activeAcc.nick}
@@ -237,282 +577,6 @@ export function MapaView({
           onHunt={handleSelectHunt}
         />
       )}
-
-      {/* Pending Hunt Queue Banner */}
-      {catalog?.pendingSlug && (
-        <div className="rounded-xl bg-amber-500/15 border border-amber-500/35 px-4 py-2.5 flex items-center justify-between text-xs text-amber-200">
-          <span className="inline-flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-400" />
-            Troca agendada para <b>{catalog.pendingSlug}</b> assim que a trava de combate terminar
-            {catalog.combatLockMs > 0 ? ` (~${Math.ceil(catalog.combatLockMs / 1000)}s)` : ""}.
-          </span>
-          <button
-            onClick={() => api.cancelPendingHunt(activeAccId).then(refresh)}
-            className="px-2 py-1 rounded bg-slate-900/70 hover:bg-slate-900 text-amber-300 inline-flex items-center gap-1"
-          >
-            <X className="w-3.5 h-3.5" /> Cancelar
-          </button>
-        </div>
-      )}
-
-      {/* Region Tabs */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {availableRegions.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => setRegion(r.id)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
-              region === r.id
-                ? "bg-indigo-500/25 text-indigo-200 border-indigo-500/40"
-                : "bg-[#111525] text-slate-400 border-slate-800 hover:text-white"
-            }`}
-          >
-            {r.label} <span className="text-[10px] opacity-60">({r.count})</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Outland Tiers Bar */}
-      {region === "outland" && catalog && catalog.outlandTiers.length > 0 && (
-        <div className="rounded-xl bg-[#111525] border border-purple-500/25 p-3 flex items-center gap-2 flex-wrap text-xs">
-          <span className="text-purple-300 font-semibold mr-1">Outland Tier:</span>
-          {catalog.outlandTiers.map((t) => {
-            const locked = catalog.accountLevel < t.nivel;
-            const selected = (catalog.outlandTier || 1) === t.tier;
-            return (
-              <button
-                key={t.tier}
-                disabled={locked}
-                onClick={() => handleTier(t.tier)}
-                className={`px-2.5 py-1 rounded-lg border transition inline-flex items-center gap-1 ${
-                  selected
-                    ? "bg-purple-500/30 text-purple-100 border-purple-400"
-                    : locked
-                    ? "bg-slate-900/50 text-slate-600 border-slate-800 cursor-not-allowed"
-                    : "bg-[#0b0e1b] text-slate-300 border-slate-700 hover:border-purple-500/50"
-                }`}
-              >
-                {locked && <Lock className="w-3 h-3" />}
-                T{t.tier} <span className="text-[10px] opacity-75">×{t.mult}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Main Grid: Hunt Rows + Sticky Analyser */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        <div className="lg:col-span-2 space-y-2">
-          {filteredHunts.length === 0 ? (
-            <div className="rounded-xl bg-[#111525] border border-slate-800 p-8 text-center text-xs text-slate-400">
-              {catalog?.hunts.length === 0
-                ? "Aguardando conta conectar para carregar catálogo de hunts..."
-                : "Nenhuma hunt encontrada com esses filtros."}
-            </div>
-          ) : (
-            filteredHunts.map((h) => {
-              const locked = h.nivelNecessario > (catalog?.accountLevel || 0);
-              const isActive = catalog?.activeSlug === h.slug;
-              const isPending = catalog?.pendingSlug === h.slug;
-              const isSelected = inspected?.slug === h.slug;
-              const sim = calcBySlug.get(h.slug);
-              return (
-                <div
-                  key={h.slug}
-                  onClick={() => setInspectSlug(h.slug)}
-                  className={`rounded-xl border p-3 flex items-center justify-between gap-3 cursor-pointer transition ${
-                    isActive
-                      ? "bg-emerald-500/10 border-emerald-500/40"
-                      : isSelected
-                      ? "bg-[#151a2e] border-indigo-500/40"
-                      : "bg-[#111525] border-slate-800 hover:border-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <PokemonSprite
-                      looktype={h.mainLook}
-                      bridgePort={bridgePort}
-                      size={42}
-                      className="rounded-lg bg-[#090c18] border border-slate-800"
-                    />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {sim?.rank && sim.rank <= 3 && (
-                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
-                            #{sim.rank}
-                          </span>
-                        )}
-                        <span className="font-semibold text-sm text-white truncate">
-                          {h.nome || h.slug}
-                        </span>
-                        <span className="text-[11px] font-mono text-slate-400">
-                          Lv {h.nivelMin || h.nivelNecessario}
-                          {h.nivelMax ? `–${h.nivelMax}` : "+"}
-                        </span>
-                        {sim && (
-                          <span className="text-[11px] font-mono text-sky-300">
-                            {fmtCompact(order === "ouro" ? sim.ouroH : sim.xpH)}{" "}
-                            {order === "ouro" ? "ouro/h" : "XP/h"}
-                          </span>
-                        )}
-                        {isActive && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-medium">
-                            Caçando
-                          </span>
-                        )}
-                        {isPending && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-medium">
-                            Na fila
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 flex-wrap mt-1">
-                        {(h.tipos || []).slice(0, 5).map((t) => (
-                          <span
-                            key={t}
-                            className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white"
-                            style={{ backgroundColor: TYPE_COLOR[t] || "#475569" }}
-                          >
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    disabled={locked || isActive || activeAcc?.state !== "ONLINE"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSelectHunt(h);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 shrink-0 transition ${
-                      locked
-                        ? "bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed"
-                        : isActive
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                        : "bg-indigo-500 hover:bg-indigo-400 text-white"
-                    }`}
-                  >
-                    {locked ? (
-                      <>
-                        <Lock className="w-3.5 h-3.5" /> Lv {h.nivelNecessario}
-                      </>
-                    ) : isActive ? (
-                      "Ativa"
-                    ) : (
-                      <>
-                        <Play className="w-3.5 h-3.5" /> Caçar
-                      </>
-                    )}
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Sticky Hunt Analyser */}
-        {inspected && (
-          <div className="rounded-2xl bg-[#111525] border border-slate-800 p-4 space-y-4 sticky top-0">
-            <div className="flex items-center gap-3">
-              <PokemonSprite
-                looktype={inspected.mainLook}
-                bridgePort={bridgePort}
-                size={52}
-                className="rounded-xl bg-[#090c18] border border-slate-800"
-              />
-              <div>
-                <h3 className="font-semibold text-base text-white">
-                  {inspected.nome || inspected.slug}
-                </h3>
-                <div className="text-xs text-slate-400">
-                  {inspected.regiao.toUpperCase()} · Lv mín {inspected.nivelNecessario}
-                </div>
-              </div>
-            </div>
-
-            {/* Matchup Summary */}
-            {(inspected.tipos || []).length > 0 && (() => {
-              const m = matchup((inspected.tipos || []).slice(0, 2));
-              return (
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center gap-1.5 text-rose-300 font-medium">
-                    <Flame className="w-3.5 h-3.5" /> Fraquezas principais
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {m.weak.slice(0, 6).map((w) => (
-                      <span
-                        key={w.type}
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white"
-                        style={{ backgroundColor: TYPE_COLOR[w.type] }}
-                      >
-                        {w.type} ×{w.mult}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-1.5 text-sky-300 font-medium pt-1">
-                    <Shield className="w-3.5 h-3.5" /> Resistências
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {m.resist.slice(0, 6).map((r) => (
-                      <span
-                        key={r.type}
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white opacity-80"
-                        style={{ backgroundColor: TYPE_COLOR[r.type] }}
-                      >
-                        {r.type} ×{r.mult}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Species list */}
-            {inspected.especies && inspected.especies.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-xs font-medium text-slate-300">
-                  Espécies ({inspected.especies.length})
-                </div>
-                <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
-                  {inspected.especies.map((sp, i) => (
-                    <div
-                      key={`${sp.pokeId}-${i}`}
-                      className="rounded-lg bg-[#0b0e1b] border border-slate-800/80 px-2.5 py-1.5 flex items-center justify-between text-xs"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <PokemonSprite looktype={sp.looktype} bridgePort={bridgePort} size={26} />
-                        <span className="text-slate-200 truncate">{sp.nome}</span>
-                      </div>
-                      <span className="text-[11px] font-mono text-slate-500">
-                        {sp.nivelMin ? `Lv ${sp.nivelMin}` : ""}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Drops */}
-            {inspected.drops && inspected.drops.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-xs font-medium text-slate-300">Drops</div>
-                <div className="flex flex-wrap gap-1">
-                  {inspected.drops.map((d) => (
-                    <span
-                      key={d}
-                      className="text-[11px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-200 border border-amber-500/20"
-                    >
-                      {d}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

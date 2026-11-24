@@ -10,6 +10,7 @@ import {
 import { api } from "../lib/api";
 import { ItemSprite } from "./PokemonSprite";
 import { PokemonSheetModal } from "./PokemonSheetModal";
+import { DsConfirmDialog, DsDialog } from "./DsPrimitives";
 
 const CHANNELS = [
   { id: "mundo", label: "Mundo" },
@@ -45,6 +46,7 @@ export function ChatView({
   const [publicSheet, setPublicSheet] = useState<PokemonDetail | null>(null);
   const [adModal, setAdModal] = useState<ListingDetail | null>(null);
   const [loadingModal, setLoadingModal] = useState(false);
+  const [confirmBuyAd, setConfirmBuyAd] = useState(false);
   const [buyingAd, setBuyingAd] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -131,19 +133,16 @@ export function ChatView({
     setLoadingModal(false);
   };
 
-  const handleBuyAd = async () => {
+  const handleBuyAd = () => {
     if (!adModal || !activeSpeaker) {
       onToast("Nenhuma conta online selecionada para comprar.");
       return;
     }
-    const moedaLabel = adModal.moeda === "orb" ? "Gemas" : "Gold";
-    if (
-      !confirm(
-        `Comprar anúncio #${adModal.id} (${adModal.qtd}× ${adModal.nome} por ${fmtCompact(adModal.preco)} ${moedaLabel}) usando ${activeSpeaker.nick}?`
-      )
-    ) {
-      return;
-    }
+    setConfirmBuyAd(true);
+  };
+
+  const handleConfirmBuyAd = async () => {
+    if (!adModal || !activeSpeaker) return;
     const buyerAccountId = activeSpeaker.id;
     const listingId = adModal.id;
     const qty = adModal.qtd;
@@ -153,6 +152,7 @@ export function ChatView({
     try {
       const res = await api.buyMarketListing(buyerAccountId, listingId, qty, price, moeda);
       onToast(`Mercado: ${res.status} — ${res.detail}`);
+      setConfirmBuyAd(false);
       setAdModal(null);
     } catch (err) {
       onToast(`Falha na compra: ${String(err)}`);
@@ -318,52 +318,58 @@ export function ChatView({
       )}
 
       {adModal && !adModal.pokemon && (
-        <div
-          onClick={() => setAdModal(null)}
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl bg-[#111525] border border-slate-700 shadow-2xl p-5 space-y-4 text-xs"
-          >
+        <DsDialog open onClose={() => setAdModal(null)} maxWidthClass="max-w-md">
+          <div className="px-box p-5 space-y-4 text-xs">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-3">
-                <ItemSprite icon={adModal.itemIcon} size={44} alt={adModal.nome} />
+                <div className="px-stage !border-2 w-12 h-12 flex items-center justify-center shrink-0">
+                  <ItemSprite icon={adModal.itemIcon} size={38} alt={adModal.nome} />
+                </div>
                 <div>
-                  <div className="text-sm font-bold text-white">
+                  <div className="font-pixel text-[12px] text-[var(--ink)]">
                     {adModal.qtd}× {adModal.nome || `Anúncio #${adModal.id}`}
                   </div>
-                  <div className="text-slate-400">
-                    Anúncio #{adModal.id} · Vendedor: <b className="text-slate-200">{adModal.vendedor || "?"}</b>
+                  <div className="text-[var(--ink-muted)] font-semibold mt-0.5">
+                    Anúncio #{adModal.id} · Vendedor: <b className="text-[var(--ink)]">{adModal.vendedor || "?"}</b>
                   </div>
                 </div>
               </div>
               <button
                 onClick={() => setAdModal(null)}
-                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400"
+                className="ds-btn ds-btn-red ds-btn-sm !px-2"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 p-3 flex items-center justify-between">
+            <div className="px-inset p-3 flex items-center justify-between">
               <div>
-                <div className="text-slate-400">Preço unitário</div>
-                <div className="font-mono text-base font-bold text-amber-300">
+                <div className="font-pixel text-[8px] text-[var(--ink-muted)]">PREÇO UNITÁRIO</div>
+                <div className="font-pixel text-sm text-[var(--ink-accent-amber)] mt-0.5">
                   {fmtCompact(adModal.preco)} {adModal.moeda === "orb" ? "Gemas" : "Gold"}
                 </div>
               </div>
               <button
                 disabled={buyingAd || !activeSpeaker}
                 onClick={handleBuyAd}
-                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold inline-flex items-center gap-1.5 disabled:opacity-40"
+                className="ds-btn ds-btn-green"
               >
-                <ShoppingCart className="w-4 h-4" />
+                <ShoppingCart className="w-3.5 h-3.5" />
                 {buyingAd ? "Comprando..." : "Comprar"}
               </button>
             </div>
           </div>
-        </div>
+        </DsDialog>
       )}
+      <DsConfirmDialog
+        open={confirmBuyAd && Boolean(adModal)}
+        title={`Comprar anúncio #${adModal?.id || ""}?`}
+        description={`Comprar ${adModal?.qtd || 1}× ${adModal?.nome || "item"} por ${fmtCompact(adModal?.preco || 0)} ${adModal?.moeda === "orb" ? "Gemas" : "Gold"} usando ${activeSpeaker?.nick || ""}?`}
+        confirmLabel="Confirmar Compra"
+        tone="primary"
+        busy={buyingAd}
+        onConfirm={handleConfirmBuyAd}
+        onClose={() => setConfirmBuyAd(false)}
+      />
     </div>
   );
 }

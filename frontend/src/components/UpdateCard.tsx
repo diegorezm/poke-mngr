@@ -142,7 +142,7 @@ function ApplyControls({
         href={d.url}
         target="_blank"
         rel="noreferrer"
-        className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/35 text-xs font-semibold inline-flex items-center gap-1.5 transition"
+        className="ds-btn ds-btn-orange ds-btn-sm"
       >
         <ExternalLink className="w-3.5 h-3.5" /> Abrir Release
       </a>
@@ -157,13 +157,13 @@ function ApplyControls({
             setConfirming(false);
             void applyUpdateNow();
           }}
-          className="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold inline-flex items-center gap-1 transition"
+          className="ds-btn ds-btn-green ds-btn-sm"
         >
           Confirmar v{d.latest}
         </button>
         <button
           onClick={() => setConfirming(false)}
-          className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs"
+          className="ds-btn ds-btn-slate ds-btn-sm"
         >
           Cancelar
         </button>
@@ -176,7 +176,7 @@ function ApplyControls({
     <button
       disabled={applying}
       onClick={() => setConfirming(true)}
-      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60 transition"
+      className="ds-btn ds-btn-orange ds-btn-sm"
     >
       {applying ? (
         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -210,7 +210,7 @@ export function UpdateBanner() {
 
   if (s.applying && s.message?.tone === "ok") {
     return (
-      <div className="bg-emerald-500/15 border-b border-emerald-500/30 px-5 py-2 text-xs text-emerald-200 flex items-center gap-2">
+      <div className="bg-[#dcfce7] border-b-[3px] border-[var(--border-dark)] px-5 py-2 text-xs font-bold text-[#14532d] flex items-center gap-2">
         <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
         <span>{s.message.text}</span>
       </div>
@@ -222,18 +222,18 @@ export function UpdateBanner() {
   if (dismissed === d.latest || isVersionDismissed(d.latest)) return null;
 
   return (
-    <div className="bg-amber-500/12 border-b border-amber-500/30 px-5 py-2 text-xs">
+    <div className="bg-amber-500/15 border-b-[1.5px] border-[var(--border-dark)] px-5 py-2 text-xs text-[var(--ink)]">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-amber-200 min-w-0">
-          <ArrowUpCircle className="w-4 h-4 text-amber-400 shrink-0" />
-          <span className="font-semibold">Nova versão v{d.latest} disponível</span>
-          <span className="text-slate-400">(instalada: v{d.current})</span>
+        <div className="flex items-center gap-2 min-w-0 font-bold">
+          <ArrowUpCircle className="w-4 h-4 text-[var(--ink-accent-amber)] shrink-0" />
+          <span>Nova versão v{d.latest} disponível</span>
+          <span className="text-[var(--ink-muted)] font-medium">(instalada: v{d.current})</span>
         </div>
         <div className="flex items-center gap-2">
           {d.notes && (
             <button
               onClick={() => setShowNotes((v) => !v)}
-              className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700"
+              className="ds-btn ds-btn-slate ds-btn-sm"
             >
               {showNotes ? "Ocultar notas" : "Ver novidades"}
             </button>
@@ -244,19 +244,19 @@ export function UpdateBanner() {
               markVersionDismissed(d.latest);
               setDismissed(d.latest);
             }}
-            className="px-2 py-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60"
+            className="font-pixel text-[9px] px-2 py-1 text-[#5a4a1c] hover:underline cursor-pointer"
           >
             Depois
           </button>
         </div>
       </div>
       {showNotes && d.notes && (
-        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/35 border border-slate-800 p-2.5 font-sans text-[11px] leading-relaxed text-slate-300">
+        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white border-2 border-[var(--border-dark)] p-2.5 font-sans text-[11px] leading-relaxed text-[#242b34]">
           {d.notes}
         </pre>
       )}
       {s.message?.tone === "error" && (
-        <div className="mt-1.5 text-rose-300">{s.message.text}</div>
+        <div className="mt-1.5 font-bold text-[#b4241c]">{s.message.text}</div>
       )}
     </div>
   );
@@ -276,16 +276,16 @@ export function UpdateSection({
   const d = s.data;
 
   return (
-    <section className="rounded-2xl bg-[#111525] border border-slate-800 p-5 space-y-3">
+    <section className="px-box p-5 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <ArrowUpCircle className="w-5 h-5 text-amber-400" /> Atualizações (GitHub Releases)
+          <h2 className="font-pixel text-sm text-[var(--ink)] flex items-center gap-2">
+            <ArrowUpCircle className="w-5 h-5 text-[#e08218]" /> Atualizações (GitHub Releases)
           </h2>
           {d && (
-            <p className="text-xs text-slate-400 mt-0.5">
-              Versão instalada: <b className="font-mono text-slate-200">v{d.current}</b> · Repositório:{" "}
-              <span className="font-mono text-slate-300">{d.repo}</span> · Última verificação:{" "}
+            <p className="text-xs text-[var(--ink-muted)] font-semibold mt-1">
+              Versão instalada: <b className="font-pixel text-[10px] text-[var(--ink)]">v{d.current}</b> · Repositório:{" "}
+              <span className="font-mono">{d.repo}</span> · Última verificação:{" "}
               {formatCheckedAgo(d.checkedAt, serverTimeMs)}
             </p>
           )}
@@ -294,7 +294,7 @@ export function UpdateSection({
           <button
             disabled={s.checking || s.applying || !d?.enabled}
             onClick={() => void checkForUpdateNow()}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition"
+            className="ds-btn ds-btn-blue ds-btn-sm"
           >
             {s.checking ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -308,22 +308,22 @@ export function UpdateSection({
       </div>
 
       {!d && (
-        <div className="text-xs text-slate-400">Carregando informações de atualização…</div>
+        <div className="text-xs text-[var(--ink-muted)]">Carregando informações de atualização…</div>
       )}
 
       {d && !d.enabled && (
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-[var(--ink-muted)]">
           Verificação automática desativada neste computador (<code className="font-mono">UPDATE_CHECK=0</code>).
         </div>
       )}
 
       {d && d.enabled && d.available && d.latest && (
-        <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3.5 space-y-2 text-xs">
+        <div className="rounded-lg bg-amber-500/12 border border-amber-600/35 p-3.5 space-y-2 text-xs text-[var(--ink)]">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="font-semibold text-amber-200">
+            <div className="font-bold">
               Versão v{d.latest} pronta para instalar
               {d.installerName && (
-                <span className="ml-2 font-mono text-[11px] text-slate-400">
+                <span className="ml-2 font-mono text-[11px] opacity-75">
                   ({d.installerName})
                 </span>
               )}
@@ -333,22 +333,22 @@ export function UpdateSection({
                 href={d.url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-amber-300 hover:underline inline-flex items-center gap-1"
+                className="font-bold text-[#a85a08] hover:underline inline-flex items-center gap-1"
               >
                 Ver no GitHub <ExternalLink className="w-3 h-3" />
               </a>
             )}
           </div>
           {d.notes && (
-            <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-2.5 font-sans text-[11px] leading-relaxed text-slate-300">
+            <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white border-2 border-[var(--border-dark)] p-2.5 font-sans text-[11px] leading-relaxed text-[#242b34]">
               {d.notes}
             </pre>
           )}
           {!d.canApply && d.cannotApplyReason && (
-            <div className="text-slate-300">{d.cannotApplyReason}</div>
+            <div>{d.cannotApplyReason}</div>
           )}
           {d.canApply && (
-            <div className="text-[11px] text-slate-400">
+            <div className="text-[11px] opacity-80">
               O instalador NSIS é verificado por SHA-256 e roda silenciosamente; suas contas e banco de dados em{" "}
               <code className="font-mono">%LOCALAPPDATA%\PokeMngr</code> são preservados.
             </div>
@@ -357,19 +357,25 @@ export function UpdateSection({
       )}
 
       {d && d.enabled && !d.available && !s.message && !d.error && d.latest && (
-        <div className="text-xs text-emerald-300 inline-flex items-center gap-1.5">
+        <div className="text-xs font-bold text-[var(--ink-accent-green)] inline-flex items-center gap-1.5">
           <CheckCircle2 className="w-4 h-4" /> Você já está na versão mais recente (v{d.current}).
         </div>
       )}
 
       {s.message && (
-        <div className={`text-xs ${s.message.tone === "ok" ? "text-emerald-300" : "text-rose-300"}`}>
+        <div
+          className={`text-xs font-bold ${
+            s.message.tone === "ok"
+              ? "text-[var(--ink-accent-green)]"
+              : "text-[var(--ink-accent-rose)]"
+          }`}
+        >
           {s.message.text}
         </div>
       )}
 
       {!s.message && d?.error && (
-        <div className="text-xs text-rose-300">{d.error}</div>
+        <div className="text-xs font-bold text-[var(--ink-accent-rose)]">{d.error}</div>
       )}
     </section>
   );

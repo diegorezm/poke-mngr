@@ -13,6 +13,7 @@ import {
   Calculator,
   Search,
   BarChart3,
+  X,
 } from "lucide-react";
 import {
   AccountTelemetry,
@@ -23,6 +24,7 @@ import {
 } from "../lib/types";
 import { api } from "../lib/api";
 import { ItemSprite, PokemonSprite } from "./PokemonSprite";
+import { DsConfirmDialog, DsDialog } from "./DsPrimitives";
 import {
   InflationChart,
   InflationPoint,
@@ -339,21 +341,37 @@ export function MarketView({
     }
   };
 
-  const handleBuy = async (ad: Record<string, unknown>) => {
+  const [pendingBuy, setPendingBuy] = useState<{
+    id: number;
+    qty: number;
+    price: number;
+  } | null>(null);
+  const [buyingMarket, setBuyingMarket] = useState(false);
+
+  const handleBuy = (ad: Record<string, unknown>) => {
     if (!activeBuyer) return;
     const id = Number(ad.id || 0);
     const qty = Number(ad.qtd || 1);
     const price = Number(ad.preco || 0);
-    if (!confirm(`Comprar anúncio #${id} (${qty}x por ${fmtCompact(price)} ${moeda}) usando ${activeBuyer.nick}?`)) {
-      return;
-    }
+    setPendingBuy({ id, qty, price });
+  };
+
+  const handleConfirmBuy = async () => {
+    if (!activeBuyer || !pendingBuy) return;
+    const buyerId = activeBuyer.id;
+    const id = pendingBuy.id;
+    const qty = pendingBuy.qty;
+    const price = pendingBuy.price;
+    setBuyingMarket(true);
     try {
-      const res = await api.buyMarketListing(activeBuyer.id, id, qty, price, moeda);
+      const res = await api.buyMarketListing(buyerId, id, qty, price, moeda);
+      setPendingBuy(null);
       onToast(`Mercado: ${res.status} — ${res.detail}`);
       loadRules();
     } catch (e) {
       onToast(`Falha na compra: ${String(e)}`);
     }
+    setBuyingMarket(false);
   };
 
   const handleAddRule = async () => {
@@ -1248,46 +1266,47 @@ export function MarketView({
         </div>
       )}
 
-      {/* Item Listings Modal */}
-      {openItem && (
-        <div
-          onClick={() => setOpenItem(null)}
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg rounded-2xl bg-[#111525] border border-slate-700 p-4 space-y-3"
-          >
-            <div className="flex justify-between items-center">
-              <h3 className="font-semibold text-white text-sm flex items-center gap-2">
-                <ItemSprite icon={itemsMeta[String(openItem.id)]?.icon} size={24} />
-                Anúncios — {itemsMeta[String(openItem.id)]?.name || `Item #${openItem.id}`} ({moeda})
+      {/* Item Listings Modal (Headless UI DsDialog) */}
+      <DsDialog
+        open={Boolean(openItem)}
+        onClose={() => setOpenItem(null)}
+        maxWidthClass="max-w-lg"
+      >
+        {openItem && (
+          <div className="border-[3px] border-[var(--border-dark)] rounded-xl overflow-hidden bg-[var(--panel-bg)] text-[var(--ink)] shadow-2xl">
+            <div className="bg-gradient-to-b from-[#66b6f6] via-[#3688d0] to-[#205c96] border-b-[3px] border-[var(--border-dark)] px-4 py-2.5 flex justify-between items-center gap-2">
+              <h3 className="ds-ribbon-pill text-white">
+                <ItemSprite icon={itemsMeta[String(openItem.id)]?.icon} size={20} />
+                <span className="truncate">
+                  {itemsMeta[String(openItem.id)]?.name || `Item #${openItem.id}`} ({moeda})
+                </span>
               </h3>
               <button
                 onClick={() => setOpenItem(null)}
-                className="text-xs text-slate-400 hover:text-white"
+                className="ds-btn ds-btn-red ds-btn-sm !px-2"
+                title="Fechar"
               >
-                Fechar
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="max-h-80 overflow-y-auto space-y-1.5 text-xs">
+            <div className="p-4 max-h-80 overflow-y-auto space-y-2 text-xs">
               {openItem.listings.map((ad, idx) => (
                 <div
                   key={String(ad.id || idx)}
-                  className="rounded-xl bg-[#0b0e1b] border border-slate-800 px-3 py-2 flex items-center justify-between"
+                  className="px-inset px-3 py-2 flex items-center justify-between gap-2"
                 >
                   <div>
-                    <div className="font-mono text-amber-300 font-semibold">
+                    <div className="font-pixel text-[11px] text-[var(--ink-accent-amber)]">
                       {fmtCompact(Number(ad.preco || 0))} {moeda}{" "}
-                      <span className="text-slate-400">×{Number(ad.qtd || 1)}</span>
+                      <span className="text-[var(--ink-muted)]">×{Number(ad.qtd || 1)}</span>
                     </div>
-                    <div className="text-[11px] text-slate-500">
+                    <div className="text-[11px] font-semibold text-[var(--ink-muted)]">
                       Vendedor: {String(ad.vendedor || "?")}
                     </div>
                   </div>
                   <button
                     onClick={() => handleBuy(ad)}
-                    className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-200 border border-emerald-500/30"
+                    className="ds-btn ds-btn-green ds-btn-sm"
                   >
                     Comprar
                   </button>
@@ -1295,8 +1314,19 @@ export function MarketView({
               ))}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </DsDialog>
+
+      <DsConfirmDialog
+        open={Boolean(pendingBuy)}
+        title={`Comprar anúncio #${pendingBuy?.id || ""}?`}
+        description={`Comprar ${pendingBuy?.qty || 1}× por ${fmtCompact(pendingBuy?.price || 0)} ${moeda} usando ${activeBuyer?.nick || ""}?`}
+        confirmLabel="Confirmar Compra"
+        tone="primary"
+        busy={buyingMarket}
+        onConfirm={handleConfirmBuy}
+        onClose={() => setPendingBuy(null)}
+      />
     </div>
   );
 }

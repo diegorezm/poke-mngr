@@ -12,6 +12,7 @@ import {
   Sliders,
   BarChart3,
   RefreshCw,
+  X,
 } from "lucide-react";
 import {
   AccountRecord,
@@ -31,6 +32,7 @@ import {
 import { api } from "../lib/api";
 import { ItemSprite } from "./PokemonSprite";
 import { UpdateSection } from "./UpdateCard";
+import { DsConfirmDialog, DsDialog, DsSwitch, MiniBall } from "./DsPrimitives";
 
 function asAccountList(list: AccountRecord[] | null | undefined): AccountRecord[] {
   return list || [];
@@ -87,8 +89,10 @@ export function SettingsView({
   const [savingAcc, setSavingAcc] = useState(false);
   const [testingProxy, setTestingProxy] = useState(false);
 
-  // Edit account state
+  // Edit / Delete account state
   const [editing, setEditing] = useState<AccountRecord | null>(null);
+  const [deleting, setDeleting] = useState<AccountRecord | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Local settings draft
   const [gs, setGs] = useState<GlobalSettings>(settings);
@@ -219,15 +223,24 @@ export function SettingsView({
     }
   };
 
-  const handleDelete = async (acc: AccountRecord) => {
-    if (!confirm(`Remover a conta "${acc.nick}"?`)) return;
+  const handleConfirmDelete = async () => {
+    if (!deleting) return;
+    const accId = deleting.id;
+    const accNick = deleting.nick;
+    const wasEditing = editing !== null && editing.id === accId;
+    setDeleteBusy(true);
     try {
-      await api.deleteAccount(acc.id);
-      onToast(`Conta ${acc.nick} removida`);
+      await api.deleteAccount(accId);
+      setDeleting(null);
+      if (wasEditing) {
+        setEditing(null);
+      }
+      onToast(`Conta ${accNick} removida!`);
       await reloadAccounts();
     } catch (e) {
       onToast(`Erro ao remover: ${String(e)}`);
     }
+    setDeleteBusy(false);
   };
 
   const handleSaveSettings = async () => {
@@ -323,158 +336,172 @@ export function SettingsView({
           )}
         </div>
 
-        {/* Add Account Wizard */}
-        {showAdd && (
-          <div className="rounded-xl bg-[#0b0e1b] border border-slate-700/80 p-4 space-y-4">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="text-sm font-medium text-amber-300">
-                Importar conta do pokeidle.io/app
+        {/* Add Account Wizard Dialog */}
+        <DsDialog
+          open={showAdd}
+          onClose={() => setShowAdd(false)}
+          maxWidthClass="max-w-2xl"
+        >
+          <div className="px-box overflow-hidden text-[var(--ink)] shadow-2xl">
+            <div className="bg-gradient-to-b from-[#e04338] to-[#c72d23] border-b-[1.5px] border-[#1b1f26] px-4 py-3 flex items-center justify-between gap-2">
+              <div className="ds-ribbon-pill text-white">
+                <MiniBall />
+                <span>Adicionar Conta · PokéIdle</span>
               </div>
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(bookmarklet);
-                  setCopiedBm(true);
-                  setTimeout(() => setCopiedBm(false), 2000);
-                  onToast("Código copiado! Cole no console (F12) do pokeidle.io/app ou salve como favorito.");
-                }}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 inline-flex items-center gap-1.5 border border-slate-700"
+                onClick={() => setShowAdd(false)}
+                className="ds-btn ds-btn-slate ds-btn-sm !px-2"
+                title="Fechar"
               >
-                {copiedBm ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                Copiar Extrator (Favorito / Console F12)
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">
-                Colar JSON copiado do jogo (preenche os campos abaixo automaticamente)
-              </label>
-              <textarea
-                rows={2}
-                value={pasteText}
-                onChange={(e) => handleParsePaste(e.target.value)}
-                placeholder='{"nick":"SeuNick","token":"...","dispositivo":"..."}'
-                className="w-full rounded-lg bg-[#111525] border border-slate-700 px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-amber-500"
-              />
-            </div>
+            <div className="p-4 space-y-4 text-xs">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="font-bold text-[var(--ink-accent-amber)]">
+                  Importar conta do pokeidle.io/app
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(bookmarklet);
+                    setCopiedBm(true);
+                    setTimeout(() => setCopiedBm(false), 2000);
+                    onToast("Código copiado! Cole no console (F12) do pokeidle.io/app ou salve como favorito.");
+                  }}
+                  className="ds-btn ds-btn-slate ds-btn-sm"
+                >
+                  {copiedBm ? <Check className="w-3.5 h-3.5 text-[#5ef082]" /> : <Copy className="w-3.5 h-3.5" />}
+                  Copiar Extrator (F12)
+                </button>
+              </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Nick</label>
-                <input
-                  value={nick}
-                  onChange={(e) => setNick(e.target.value)}
-                  className="w-full rounded-lg bg-[#111525] border border-slate-700 px-3 py-2 text-xs text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Token</label>
-                <input
-                  type="password"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  className="w-full rounded-lg bg-[#111525] border border-slate-700 px-3 py-2 text-xs text-white font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">
-                  Device ID (opcional)
+                <label className="block font-bold text-[var(--ink-muted)] mb-1">
+                  Colar JSON copiado do jogo (preenche os campos abaixo automaticamente)
                 </label>
-                <input
-                  value={deviceId}
-                  onChange={(e) => setDeviceId(e.target.value)}
-                  placeholder="Auto UUID se vazio"
-                  className="w-full rounded-lg bg-[#111525] border border-slate-700 px-3 py-2 text-xs text-white font-mono"
+                <textarea
+                  rows={2}
+                  value={pasteText}
+                  onChange={(e) => handleParsePaste(e.target.value)}
+                  placeholder='{"nick":"SeuNick","token":"...","dispositivo":"..."}'
+                  className="ds-input w-full px-3 py-2 font-mono text-xs"
                 />
               </div>
-            </div>
 
-            {/* Proxy */}
-            <div className="space-y-2 pt-1">
-              <label className="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={useProxy}
-                  onChange={(e) => setUseProxy(e.target.checked)}
-                />
-                Usar proxy dedicado (SOCKS5 / HTTP) nesta conta
-              </label>
-              {useProxy && (
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
-                  <select
-                    value={proxy.scheme}
-                    onChange={(e) => setProxy({ ...proxy, scheme: e.target.value })}
-                    className="rounded-lg bg-[#111525] border border-slate-700 px-2 py-2 text-xs text-white"
-                  >
-                    <option value="socks5">socks5</option>
-                    <option value="socks5h">socks5h</option>
-                    <option value="http">http</option>
-                    <option value="https">https</option>
-                  </select>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-[var(--ink-muted)] mb-1">Nick</label>
                   <input
-                    placeholder="Host"
-                    value={proxy.host}
-                    onChange={(e) => setProxy({ ...proxy, host: e.target.value })}
-                    className="col-span-2 rounded-lg bg-[#111525] border border-slate-700 px-2.5 py-2 text-xs text-white"
+                    value={nick}
+                    onChange={(e) => setNick(e.target.value)}
+                    className="ds-input w-full px-3 py-2 text-xs font-semibold"
                   />
-                  <input
-                    type="number"
-                    placeholder="Porta"
-                    value={proxy.port}
-                    onChange={(e) => setProxy({ ...proxy, port: Number(e.target.value) })}
-                    className="rounded-lg bg-[#111525] border border-slate-700 px-2.5 py-2 text-xs text-white"
-                  />
-                  <input
-                    placeholder="Usuário"
-                    value={proxy.username || ""}
-                    onChange={(e) => setProxy({ ...proxy, username: e.target.value })}
-                    className="rounded-lg bg-[#111525] border border-slate-700 px-2.5 py-2 text-xs text-white"
-                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-[var(--ink-muted)] mb-1">Token</label>
                   <input
                     type="password"
-                    placeholder="Senha"
-                    value={proxy.password || ""}
-                    onChange={(e) => setProxy({ ...proxy, password: e.target.value })}
-                    className="rounded-lg bg-[#111525] border border-slate-700 px-2.5 py-2 text-xs text-white"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    className="ds-input w-full px-3 py-2 text-xs font-mono"
                   />
+                </div>
+                <div>
+                  <label className="block font-bold text-[var(--ink-muted)] mb-1">
+                    Device ID (opcional)
+                  </label>
+                  <input
+                    value={deviceId}
+                    onChange={(e) => setDeviceId(e.target.value)}
+                    placeholder="Auto UUID se vazio"
+                    className="ds-input w-full px-3 py-2 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Proxy */}
+              <div className="px-inset p-3 space-y-2.5">
+                <DsSwitch
+                  checked={useProxy}
+                  onChange={setUseProxy}
+                  label="Usar proxy dedicado (SOCKS5 / HTTP) nesta conta"
+                />
+                {useProxy && (
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2 items-end pt-1 animate-ds-tab">
+                    <select
+                      value={proxy.scheme}
+                      onChange={(e) => setProxy({ ...proxy, scheme: e.target.value })}
+                      className="ds-input px-2 py-2 text-xs font-bold"
+                    >
+                      <option value="socks5">socks5</option>
+                      <option value="socks5h">socks5h</option>
+                      <option value="http">http</option>
+                      <option value="https">https</option>
+                    </select>
+                    <input
+                      placeholder="Host"
+                      value={proxy.host}
+                      onChange={(e) => setProxy({ ...proxy, host: e.target.value })}
+                      className="ds-input col-span-2 px-2.5 py-2 text-xs"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Porta"
+                      value={proxy.port}
+                      onChange={(e) => setProxy({ ...proxy, port: Number(e.target.value) })}
+                      className="ds-input px-2.5 py-2 text-xs font-mono"
+                    />
+                    <input
+                      placeholder="Usuário"
+                      value={proxy.username || ""}
+                      onChange={(e) => setProxy({ ...proxy, username: e.target.value })}
+                      className="ds-input px-2.5 py-2 text-xs"
+                    />
+                    <input
+                      type="password"
+                      placeholder="Senha"
+                      value={proxy.password || ""}
+                      onChange={(e) => setProxy({ ...proxy, password: e.target.value })}
+                      className="ds-input px-2.5 py-2 text-xs"
+                    />
+                    <button
+                      disabled={testingProxy || !proxy.host}
+                      onClick={() => handleTestProxy(proxy)}
+                      className="col-span-2 ds-btn ds-btn-blue ds-btn-sm"
+                    >
+                      <Wifi className="w-3.5 h-3.5" />
+                      {testingProxy ? "Testando..." : "Testar Proxy"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t-2 border-[var(--border-mid)]/35">
+                <DsSwitch
+                  checked={skipTest}
+                  onChange={setSkipTest}
+                  label="Pular teste de conexão ao salvar"
+                />
+                <div className="flex items-center gap-2">
                   <button
-                    disabled={testingProxy || !proxy.host}
-                    onClick={() => handleTestProxy(proxy)}
-                    className="col-span-2 md:col-span-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-sky-300 inline-flex items-center justify-center gap-1.5 border border-slate-700"
+                    onClick={() => setShowAdd(false)}
+                    className="ds-btn ds-btn-slate ds-btn-sm"
                   >
-                    <Wifi className="w-3.5 h-3.5" />
-                    {testingProxy ? "Testando..." : "Testar Proxy"}
+                    Cancelar
+                  </button>
+                  <button
+                    disabled={savingAcc || !nick || !token}
+                    onClick={handleAddAccount}
+                    className="ds-btn ds-btn-green ds-btn-sm"
+                  >
+                    {savingAcc ? "Validando..." : skipTest ? "Salvar Conta" : "Testar e Salvar"}
                   </button>
                 </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-              <label className="inline-flex items-center gap-2 text-xs text-slate-400">
-                <input
-                  type="checkbox"
-                  checked={skipTest}
-                  onChange={(e) => setSkipTest(e.target.checked)}
-                />
-                Pular teste de conexão ao salvar
-              </label>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowAdd(false)}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-300"
-                >
-                  Cancelar
-                </button>
-                <button
-                  disabled={savingAcc || !nick || !token}
-                  onClick={handleAddAccount}
-                  className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs disabled:opacity-50"
-                >
-                  {savingAcc ? "Validando..." : skipTest ? "Salvar Conta" : "Testar e Salvar"}
-                </button>
               </div>
             </div>
           </div>
-        )}
+        </DsDialog>
 
         {/* Accounts List */}
         {accounts.length === 0 ? (
@@ -514,17 +541,17 @@ export function SettingsView({
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setEditing(structuredClone(acc))}
-                    className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    className="ds-btn ds-btn-blue ds-btn-sm"
                     title="Editar conta e recompra"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-3.5 h-3.5" /> Editar
                   </button>
                   <button
-                    onClick={() => handleDelete(acc)}
-                    className="p-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300"
+                    onClick={() => setDeleting(acc)}
+                    className="ds-btn ds-btn-red ds-btn-sm !px-2"
                     title="Remover conta"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
@@ -532,238 +559,255 @@ export function SettingsView({
           </div>
         )}
 
-        {/* Edit Account Drawer / Inline Modal */}
-        {editing && (
-          <div className="rounded-xl bg-[#0d1224] border border-indigo-500/40 p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-indigo-200 flex items-center gap-2">
-                <Sliders className="w-4 h-4" /> Editando {editing.nick}
-              </h3>
-              <label className="inline-flex items-center gap-2 text-xs text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={editing.enabled}
-                  onChange={(e) => setEditing({ ...editing, enabled: e.target.checked })}
-                />
-                Conta ativa
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Novo Token (deixe vazio p/ manter)</label>
-                <input
-                  type="password"
-                  value={editing.token || ""}
-                  onChange={(e) => setEditing({ ...editing, token: e.target.value })}
-                  className="w-full rounded-lg bg-[#111525] border border-slate-700 px-3 py-1.5 text-xs font-mono text-white"
-                />
-              </div>
-              <label className="flex items-center gap-2 text-xs text-slate-200 mt-5">
-                <input
-                  type="checkbox"
-                  checked={editing.options.autoCatch}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      options: { ...editing.options, autoCatch: e.target.checked },
-                    })
-                  }
-                />
-                Auto-Catch (jogar Pokébolas)
-              </label>
-              <label className="flex items-center gap-2 text-xs text-slate-200 mt-5">
-                <input
-                  type="checkbox"
-                  checked={editing.options.directMode}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      options: { ...editing.options, directMode: e.target.checked },
-                    })
-                  }
-                />
-                Modo Direto (desativa WS headless)
-              </label>
-            </div>
-
-            {/* Advanced Restock (manager-online + pokeidleDeck merged) */}
-            <div className="rounded-lg bg-[#090c18] border border-slate-800 p-3 space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-amber-300">
-                  <input
-                    type="checkbox"
-                    checked={editing.options.restock.enabled}
-                    onChange={(e) => updateRestock({ enabled: e.target.checked })}
-                  />
-                  Recompra Automática Avançada (Histerese + Piso de Ouro)
-                </label>
-                <div className="flex items-center gap-3">
-                  <label className="inline-flex items-center gap-1.5 text-xs text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={editing.options.restock.potionFirst}
-                      onChange={(e) => updateRestock({ potionFirst: e.target.checked })}
-                    />
-                    Poção em 1º na fila
-                  </label>
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-slate-400">Piso Ouro:</span>
-                    <input
-                      type="number"
-                      value={editing.options.restock.goldFloor}
-                      onChange={(e) => updateRestock({ goldFloor: Number(e.target.value) })}
-                      className="w-28 rounded bg-[#111525] border border-slate-700 px-2 py-1 text-xs font-mono text-amber-300"
-                    />
-                  </div>
+        {/* Edit Account Dialog (Headless UI) */}
+        <DsDialog
+          open={Boolean(editing)}
+          onClose={() => setEditing(null)}
+          maxWidthClass="max-w-3xl"
+        >
+          {editing && (
+            <div className="px-box overflow-hidden text-[var(--ink)] shadow-2xl">
+              {/* Dialog Header Ribbon */}
+              <div className="bg-gradient-to-b from-[#e04338] to-[#c72d23] border-b-[1.5px] border-[#1b1f26] px-4 py-3 flex items-center justify-between gap-2 flex-wrap">
+                <div className="ds-ribbon-pill text-white">
+                  <Sliders className="w-4 h-4" />
+                  <span>Editando · {editing.nick}</span>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                {/* Potion rule */}
-                <div className="rounded-lg bg-[#111525] p-2.5 space-y-2 border border-slate-800">
-                  <label className="flex items-center gap-2 font-medium text-rose-300">
-                    <input
-                      type="checkbox"
-                      checked={editing.options.restock.potion.enabled}
-                      onChange={(e) => updateRestockRule("potion", { enabled: e.target.checked })}
+                <div className="flex items-center gap-2.5">
+                  <div className="bg-black/25 border border-white/30 rounded-lg px-2.5 py-1 flex items-center gap-2">
+                    <DsSwitch
+                      checked={editing.enabled}
+                      onChange={(checked) => setEditing({ ...editing, enabled: checked })}
                     />
-                    <ItemSprite icon={potionIcon(editing.options.restock.potion.id || 204)} size={20} />
-                    Poções
-                  </label>
-                  <select
-                    value={editing.options.restock.potion.id}
-                    onChange={(e) => updateRestockRule("potion", { id: Number(e.target.value) })}
-                    className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 text-xs"
+                    <span className="font-mono-num text-[11px] font-bold text-white">
+                      {editing.enabled ? "ATIVA" : "PAUSADA"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setEditing(null)}
+                    className="ds-btn ds-btn-slate ds-btn-sm !px-2"
+                    title="Fechar"
                   >
-                    <option value={0}>Auto (Equipada / Melhor custo HP)</option>
-                    {POTION_OPTIONS.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <div>
-                      <span className="text-[10px] text-slate-500">Abaixo de</span>
-                      <input
-                        type="number"
-                        value={editing.options.restock.potion.below}
-                        onChange={(e) => updateRestockRule("potion", { below: Number(e.target.value) })}
-                        className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 space-y-4 text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                  <div>
+                    <label className="block font-bold text-[var(--ink-muted)] mb-1">
+                      Novo Token (deixe vazio p/ manter)
+                    </label>
+                    <input
+                      type="password"
+                      value={editing.token || ""}
+                      onChange={(e) => setEditing({ ...editing, token: e.target.value })}
+                      className="ds-input w-full px-3 py-2 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="px-inset px-3 py-2">
+                    <DsSwitch
+                      checked={editing.options.autoCatch}
+                      onChange={(checked) =>
+                        setEditing({
+                          ...editing,
+                          options: { ...editing.options, autoCatch: checked },
+                        })
+                      }
+                      label="Auto-Catch (Pokébolas)"
+                    />
+                  </div>
+                  <div className="px-inset px-3 py-2">
+                    <DsSwitch
+                      checked={editing.options.directMode}
+                      onChange={(checked) =>
+                        setEditing({
+                          ...editing,
+                          options: { ...editing.options, directMode: checked },
+                        })
+                      }
+                      label="Modo Direto (sem WS)"
+                    />
+                  </div>
+                </div>
+
+                {/* Advanced Restock Panel */}
+                <div className="px-inset p-3.5 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <DsSwitch
+                      checked={editing.options.restock.enabled}
+                      onChange={(checked) => updateRestock({ enabled: checked })}
+                      label="Recompra Automática Avançada (Histerese + Piso de Ouro)"
+                    />
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <DsSwitch
+                        checked={editing.options.restock.potionFirst}
+                        onChange={(checked) => updateRestock({ potionFirst: checked })}
+                        label="Poção em 1º"
                       />
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-[var(--ink-muted)]">Piso Ouro:</span>
+                        <input
+                          type="number"
+                          value={editing.options.restock.goldFloor}
+                          onChange={(e) => updateRestock({ goldFloor: Number(e.target.value) })}
+                          className="ds-input w-28 px-2 py-1 text-xs font-mono font-bold text-[var(--ink-accent-amber)]"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500">Manter em</span>
-                      <input
-                        type="number"
-                        value={editing.options.restock.potion.keep}
-                        onChange={(e) => updateRestockRule("potion", { keep: Number(e.target.value) })}
-                        className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
-                      />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    {/* Potion rule */}
+                    <div className="px-box p-3 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1.5 font-pixel text-[10px] text-[var(--ink-accent-rose)]">
+                          <ItemSprite icon={potionIcon(editing.options.restock.potion.id || 204)} size={20} />
+                          POÇÕES
+                        </span>
+                        <DsSwitch
+                          checked={editing.options.restock.potion.enabled}
+                          onChange={(checked) => updateRestockRule("potion", { enabled: checked })}
+                        />
+                      </div>
+                      <select
+                        value={editing.options.restock.potion.id}
+                        onChange={(e) => updateRestockRule("potion", { id: Number(e.target.value) })}
+                        className="ds-input w-full px-2 py-1.5 text-xs font-semibold"
+                      >
+                        <option value={0}>Auto (Equipada / Melhor custo HP)</option>
+                        {POTION_OPTIONS.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <span className="text-[10px] font-bold text-[var(--ink-muted)]">Abaixo de</span>
+                          <input
+                            type="number"
+                            value={editing.options.restock.potion.below}
+                            onChange={(e) => updateRestockRule("potion", { below: Number(e.target.value) })}
+                            className="ds-input w-full px-2 py-1 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-[var(--ink-muted)]">Manter em</span>
+                          <input
+                            type="number"
+                            value={editing.options.restock.potion.keep}
+                            onChange={(e) => updateRestockRule("potion", { keep: Number(e.target.value) })}
+                            className="ds-input w-full px-2 py-1 font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ball rule */}
+                    <div className="px-box p-3 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1.5 font-pixel text-[10px] text-[var(--ink-accent-sky)]">
+                          <ItemSprite icon={ballIcon(editing.options.restock.ball.id || 4)} size={20} />
+                          POKÉBOLAS
+                        </span>
+                        <DsSwitch
+                          checked={editing.options.restock.ball.enabled}
+                          onChange={(checked) => updateRestockRule("ball", { enabled: checked })}
+                        />
+                      </div>
+                      <select
+                        value={editing.options.restock.ball.id}
+                        onChange={(e) => updateRestockRule("ball", { id: Number(e.target.value) })}
+                        className="ds-input w-full px-2 py-1.5 text-xs font-semibold"
+                      >
+                        <option value={0}>Auto (Bola equipada)</option>
+                        {BALL_OPTIONS.filter((b) => b.id <= 4).map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <span className="text-[10px] font-bold text-[var(--ink-muted)]">Abaixo de</span>
+                          <input
+                            type="number"
+                            value={editing.options.restock.ball.below}
+                            onChange={(e) => updateRestockRule("ball", { below: Number(e.target.value) })}
+                            className="ds-input w-full px-2 py-1 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-[var(--ink-muted)]">Manter em</span>
+                          <input
+                            type="number"
+                            value={editing.options.restock.ball.keep}
+                            onChange={(e) => updateRestockRule("ball", { keep: Number(e.target.value) })}
+                            className="ds-input w-full px-2 py-1 font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Revive rule */}
+                    <div className="px-box p-3 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1.5 font-pixel text-[10px] text-[var(--ink-accent-green)]">
+                          <ItemSprite icon={REVIVE_ICON} size={20} />
+                          REVIVES
+                        </span>
+                        <DsSwitch
+                          checked={editing.options.restock.revive.enabled}
+                          onChange={(checked) => updateRestockRule("revive", { enabled: checked })}
+                        />
+                      </div>
+                      <div className="text-[11px] font-semibold text-[var(--ink-muted)] py-1">
+                        Mais barato · soma todos os revives no inventário
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <span className="text-[10px] font-bold text-[var(--ink-muted)]">Abaixo de</span>
+                          <input
+                            type="number"
+                            value={editing.options.restock.revive.below}
+                            onChange={(e) => updateRestockRule("revive", { below: Number(e.target.value) })}
+                            className="ds-input w-full px-2 py-1 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-[var(--ink-muted)]">Manter em</span>
+                          <input
+                            type="number"
+                            value={editing.options.restock.revive.keep}
+                            onChange={(e) => updateRestockRule("revive", { keep: Number(e.target.value) })}
+                            className="ds-input w-full px-2 py-1 font-mono"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Ball rule */}
-                <div className="rounded-lg bg-[#111525] p-2.5 space-y-2 border border-slate-800">
-                  <label className="flex items-center gap-2 font-medium text-sky-300">
-                    <input
-                      type="checkbox"
-                      checked={editing.options.restock.ball.enabled}
-                      onChange={(e) => updateRestockRule("ball", { enabled: e.target.checked })}
-                    />
-                    <ItemSprite icon={ballIcon(editing.options.restock.ball.id || 4)} size={20} />
-                    Pokébolas
-                  </label>
-                  <select
-                    value={editing.options.restock.ball.id}
-                    onChange={(e) => updateRestockRule("ball", { id: Number(e.target.value) })}
-                    className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 text-xs"
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => setEditing(null)}
+                    className="ds-btn ds-btn-slate"
                   >
-                    <option value={0}>Auto (Bola equipada)</option>
-                    {BALL_OPTIONS.filter((b) => b.id <= 4).map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <div>
-                      <span className="text-[10px] text-slate-500">Abaixo de</span>
-                      <input
-                        type="number"
-                        value={editing.options.restock.ball.below}
-                        onChange={(e) => updateRestockRule("ball", { below: Number(e.target.value) })}
-                        className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500">Manter em</span>
-                      <input
-                        type="number"
-                        value={editing.options.restock.ball.keep}
-                        onChange={(e) => updateRestockRule("ball", { keep: Number(e.target.value) })}
-                        className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Revive rule */}
-                <div className="rounded-lg bg-[#111525] p-2.5 space-y-2 border border-slate-800">
-                  <label className="flex items-center gap-2 font-medium text-emerald-300">
-                    <input
-                      type="checkbox"
-                      checked={editing.options.restock.revive.enabled}
-                      onChange={(e) => updateRestockRule("revive", { enabled: e.target.checked })}
-                    />
-                    <ItemSprite icon={REVIVE_ICON} size={20} />
-                    Revives (mais barato)
-                  </label>
-                  <div className="text-[11px] text-slate-500 py-1">
-                    Soma todos os revives no inventário
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <div>
-                      <span className="text-[10px] text-slate-500">Abaixo de</span>
-                      <input
-                        type="number"
-                        value={editing.options.restock.revive.below}
-                        onChange={(e) => updateRestockRule("revive", { below: Number(e.target.value) })}
-                        className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500">Manter em</span>
-                      <input
-                        type="number"
-                        value={editing.options.restock.revive.keep}
-                        onChange={(e) => updateRestockRule("revive", { keep: Number(e.target.value) })}
-                        className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
-                      />
-                    </div>
-                  </div>
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="ds-btn ds-btn-green"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Salvar Alterações
+                  </button>
                 </div>
               </div>
             </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setEditing(null)}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-300"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                className="px-4 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-semibold text-xs inline-flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" /> Salvar Alterações
-              </button>
-            </div>
-          </div>
-        )}
+          )}
+        </DsDialog>
       </section>
 
       {/* Global Settings Section */}
@@ -985,6 +1029,18 @@ export function SettingsView({
 
       {/* Auto-Updater Section */}
       <UpdateSection serverTimeMs={serverTimeMs} />
+
+      {/* Delete Account Confirm Dialog */}
+      <DsConfirmDialog
+        open={Boolean(deleting)}
+        title={`Remover conta ${deleting?.nick || ""}?`}
+        description={`A conta "${deleting?.nick || ""}" será desconectada e removida permanentemente do PokeMngr (junto com os contadores de sessão e preferências de lives desta conta).`}
+        confirmLabel="Remover Conta"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleting(null)}
+      />
     </div>
   );
 }
