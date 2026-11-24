@@ -2,6 +2,8 @@
 
 Sua central de controle para jogar e gerenciar até **4 contas de PokéIdle** ao mesmo tempo — com visual limpo inspirado na Pokédex, tema claro e escuro, automações inteligentes, alertas no Discord e acompanhamento completo do seu progresso.
 
+![Mapa e Melhores Hunts no PokeMngr](docs/screenshots/mapa-melhores-hunts.png)
+
 ---
 
 ## Por que usar o PokeMngr?
@@ -22,6 +24,8 @@ Acompanhe todas as suas contas lado a lado, com clareza:
 - Contagem de Shinies encontrados/capturados e drops raros da sessão;
 - Reconexão automática e pausa segura quando você entra no jogo por outro dispositivo.
 
+![Painel Multi-Contas do PokeMngr](docs/screenshots/dashboard.png)
+
 ### Automações que Economizam Tempo
 - **Auto-Catch:** arremessa pokébolas automaticamente seguindo a ordem de prioridade que você definir.
 - **Recompra Automática Inteligente:** mantém suas poções, pokébolas e revives sempre no nível ideal, escolhendo a melhor relação custo-benefício e respeitando um **piso mínimo de ouro** para nunca zerar sua conta.
@@ -33,18 +37,22 @@ Acompanhe todas as suas contas lado a lado, com clareza:
 - Ajuste o zoom, ative redução de animações ou modo de desempenho leve para consumir menos memória do computador;
 - Suporte opcional à extensão `/hunt` para quem gosta de usar os recursos extras da comunidade.
 
+![Deck Visual integrado com PokéIdle](docs/screenshots/deck-visual.jpg)
+
 ### Mapa, Mochila e PC Box Unificados
-- **Mapa & Hunts:** explore regiões e níveis de Outland, veja os Pokémon de cada local e mude de hunt com um clique.
+- **Melhores Hunts & Mapa:** veja o ranking das melhores hunts para o seu Pokémon equipado, confira fraquezas, resistências e drops, explore regiões (incluindo Outland) e mude de hunt com um clique.
 - **Inventário Unificado:** veja todos os itens, pokébolas, poções, itens raros e Pokémon de todas as suas contas em um único lugar.
 - **Ficha Completa do Pokémon:** clique em qualquer Pokémon para conferir atributos, IVs, ataques, evoluções e qualidade.
 - **Valoração Estimada:** calcule quanto vale o seu inventário (Gemas, itens raros e Shinies) com base nos preços recentes do mercado.
 - **Venda Rápida do Depósito:** venda os Pokémon sobrando direto pelo painel, com janela de confirmação segura.
 
 ### Mercado, Gráficos e Sniper
-- Consulte itens e Pokémon à venda, filtre por brilho (Shiny), IV mínimo, nível, P5, Z-Move e ataques em área;
+- Consulte itens e Pokémon à venda, compare o menor preço atual com a média dos últimos 7 dias e filtre por brilho (Shiny), IV mínimo, nível, P5, Z-Move e ataques em área;
 - Acompanhe gráficos de preço médio dos últimos dias e salve seus itens favoritos;
 - Receba alertas quando um item raro que você possui estiver bem acima da média — ótimo momento para vender;
 - Configure **Alertas de Preço** ou **Sniper** com limite máximo por compra e orçamento diário por conta.
+
+![Poké Mart — Mercado e Sniper](docs/screenshots/mercado-sniper.png)
 
 ### Arena PvP, Passe de Batalha e Chat
 - **PvP:** monte sua equipe, acompanhe os rankings semanal e mensal e entre automaticamente na fila quando sua conta estiver pronta.
