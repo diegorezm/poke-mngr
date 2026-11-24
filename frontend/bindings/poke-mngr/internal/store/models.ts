@@ -70,16 +70,24 @@ export interface MarketRuleSpec {
     "query"?: string;
 
     /**
+     * pokemon type filter
+     */
+    "elemento"?: string;
+
+    /**
      * "gold" | "orb"
      */
     "moeda": string;
     "maxPrice": number;
 
     /**
-     * alert when X% below 7d avg
+     * alert/snipe when X% below 7d avg
      */
     "maxPctBelow"?: number;
     "onlyShiny"?: boolean;
+    "onlyP5"?: boolean;
+    "onlyZMove"?: boolean;
+    "onlyTmAoe"?: boolean;
     "minIv"?: number;
     "minLevel"?: number;
 

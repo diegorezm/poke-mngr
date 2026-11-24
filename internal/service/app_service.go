@@ -443,6 +443,31 @@ func (s *AppService) GetMarketGuideStats(days int) (map[string]any, error) {
 	return s.mgr.Market().GuideStats(context.Background(), days)
 }
 
+func (s *AppService) GetMarketGuideSeries(name, moeda string, days int) (map[string]any, error) {
+	return s.mgr.Market().GuideSeries(context.Background(), name, moeda, days)
+}
+
+func (s *AppService) GetMarketListingDetail(listingID int) (*pokeidle.ListingDetail, error) {
+	return s.mgr.Market().GetListingDetail(context.Background(), listingID)
+}
+
+func (s *AppService) GetPublicPokemonSheet(nick string, pokemonID int) (*pokeidle.PokemonDetail, error) {
+	return s.mgr.GetPublicPokemonSheet(context.Background(), nick, pokemonID)
+}
+
+func (s *AppService) GetInventoryValuation(accountID int) (*pokeidle.InventoryValuation, error) {
+	return s.mgr.Market().Valuation(context.Background(), accountID)
+}
+
+func (s *AppService) SetMarketSellAlert(enabled bool, pct int) error {
+	gs := s.mgr.Settings()
+	gs.MarketSellAlert = enabled
+	if pct >= 5 {
+		gs.MarketSellAlertPct = pct
+	}
+	return s.mgr.UpdateSettings(gs)
+}
+
 func (s *AppService) ToggleMarketFav(itemID int) (bool, error) {
 	return s.mgr.Store().ToggleMarketFav(itemID)
 }

@@ -252,10 +252,12 @@ type GlobalSettings struct {
 	DownAlertDelaySec     int    `json:"downAlertDelaySec"`
 	MinimizeToTrayOnClose bool   `json:"minimizeToTrayOnClose"`
 	StartMinimized        bool   `json:"startMinimized"`
-	CardStyle             string `json:"cardStyle"` // padrao | medalhao | versus | corrida
-	Language              string `json:"language"`  // pt | en
-	SniperEnabled         bool   `json:"sniperEnabled"`
-	DeckLayout            string `json:"deckLayout"` // grid | columns | focus
+	CardStyle             string  `json:"cardStyle"` // padrao | medalhao | versus | corrida
+	Language              string  `json:"language"`  // pt | en
+	SniperEnabled         bool    `json:"sniperEnabled"`
+	MarketSellAlert       bool    `json:"marketSellAlert"`
+	MarketSellAlertPct    int     `json:"marketSellAlertPct"`
+	DeckLayout            string  `json:"deckLayout"` // grid | columns | focus
 	DeckZoom              float64 `json:"deckZoom"`
 	DeckUltra             bool   `json:"deckUltra"`
 	DeckReduceMotion      bool   `json:"deckReduceMotion"`
@@ -274,6 +276,8 @@ func DefaultGlobalSettings() GlobalSettings {
 		CardStyle:             "padrao",
 		Language:              "pt",
 		SniperEnabled:         false,
+		MarketSellAlert:       false,
+		MarketSellAlertPct:    30,
 		DeckLayout:            "grid",
 		DeckZoom:              1.0,
 		DeckUltra:             false,

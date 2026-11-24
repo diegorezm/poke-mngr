@@ -6,18 +6,22 @@ import (
 )
 
 type MarketRuleSpec struct {
-	Target      string `json:"target"`                // "item" | "pokemon"
-	ItemID      int    `json:"itemId,omitempty"`
-	ItemName    string `json:"itemName,omitempty"`
-	Query       string `json:"query,omitempty"`       // pokemon search
-	Moeda       string `json:"moeda"`                 // "gold" | "orb"
-	MaxPrice    int64  `json:"maxPrice"`
-	MaxPctBelow float64 `json:"maxPctBelow,omitempty"` // alert when X% below 7d avg
-	OnlyShiny   bool   `json:"onlyShiny,omitempty"`
-	MinIV       int    `json:"minIv,omitempty"`
-	MinLevel    int    `json:"minLevel,omitempty"`
-	DailyBudget int64  `json:"dailyBudget,omitempty"` // per account per day
-	AccountIDs  []int  `json:"accountIds,omitempty"`
+	Target      string  `json:"target"`                // "item" | "pokemon"
+	ItemID      int     `json:"itemId,omitempty"`
+	ItemName    string  `json:"itemName,omitempty"`
+	Query       string  `json:"query,omitempty"`       // pokemon search
+	Elemento    string  `json:"elemento,omitempty"`    // pokemon type filter
+	Moeda       string  `json:"moeda"`                 // "gold" | "orb"
+	MaxPrice    int64   `json:"maxPrice"`
+	MaxPctBelow float64 `json:"maxPctBelow,omitempty"` // alert/snipe when X% below 7d avg
+	OnlyShiny   bool    `json:"onlyShiny,omitempty"`
+	OnlyP5      bool    `json:"onlyP5,omitempty"`
+	OnlyZMove   bool    `json:"onlyZMove,omitempty"`
+	OnlyTmAoe   bool    `json:"onlyTmAoe,omitempty"`
+	MinIV       int     `json:"minIv,omitempty"`
+	MinLevel    int     `json:"minLevel,omitempty"`
+	DailyBudget int64   `json:"dailyBudget,omitempty"` // per account per day
+	AccountIDs  []int   `json:"accountIds,omitempty"`
 }
 
 type MarketRule struct {

@@ -14,6 +14,8 @@ export type {
     ChatMessage,
     ChatPokemonLink,
     EquippedItem,
+    EvoStep,
+    EvolutionProjection,
     HuntInfo,
     HuntSpeciesInfo,
     HuntTelemetry,
@@ -21,6 +23,8 @@ export type {
     InventoryItemAccountQty,
     InventoryItemEntry,
     InventorySummary,
+    InventoryValuation,
+    ListingDetail,
     MarketBuyResult,
     OutlandTier,
     PassSnapshot,
@@ -31,5 +35,6 @@ export type {
     PvpMatchEntry,
     SellResult,
     SessionTelemetry,
-    TelemetrySnapshot
+    TelemetrySnapshot,
+    ValuationItem
 } from "./models.js";

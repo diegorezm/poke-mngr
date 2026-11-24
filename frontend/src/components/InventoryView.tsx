@@ -5,41 +5,26 @@ import {
   Coins,
   Gem,
   Trash2,
-  X,
   Lock,
   Star,
+  DollarSign,
+  RefreshCw,
 } from "lucide-react";
 import {
   AccountTelemetry,
   InventorySummary,
+  InventoryValuation,
   PokemonDetail,
   fmtCompact,
 } from "../lib/types";
 import { api } from "../lib/api";
-import { TYPE_COLOR } from "../lib/gameData";
-import { PokemonSprite } from "./PokemonSprite";
+import { ItemSprite, PokemonSprite } from "./PokemonSprite";
+import { GRADE_COLORS, PokemonSheetModal } from "./PokemonSheetModal";
 
-const GRADE_COLORS: Record<string, string> = {
-  "extremamente-fraco": "text-slate-400",
-  fraco: "text-slate-300",
-  mediano: "text-sky-300",
-  razoavel: "text-cyan-300",
-  bom: "text-emerald-300",
-  forte: "text-lime-300",
-  poderoso: "text-amber-300",
-  mitico: "text-orange-400",
-  legendario: "text-fuchsia-400",
-  divino: "text-yellow-300",
-};
-
-const STAT_LABELS: [string, string][] = [
-  ["hp", "HP"],
-  ["atk", "ATK"],
-  ["def", "DEF"],
-  ["spAtk", "SpA"],
-  ["spDef", "SpD"],
-  ["speed", "SPD"],
-];
+function fmtUsd(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return "$0.00";
+  return `$${v.toFixed(2)}`;
+}
 
 export function InventoryView({
   accounts,
@@ -53,8 +38,10 @@ export function InventoryView({
   const [subTab, setSubTab] = useState<"items" | "pokemons">("items");
   const [accountFilter, setAccountFilter] = useState<number>(0);
   const [inv, setInv] = useState<InventorySummary | null>(null);
+  const [valuation, setValuation] = useState<InventoryValuation | null>(null);
+  const [loadingVal, setLoadingVal] = useState(false);
   const [pokemons, setPokemons] = useState<PokemonDetail[]>([]);
-  const [sortBy, setSortBy] = useState<"level" | "nota" | "iv" | "nome">("level");
+  const [sortBy, setSortBy] = useState<"level" | "pvp" | "pve" | "nota" | "iv" | "nome">("level");
   const [search, setSearch] = useState("");
   const [onlyShiny, setOnlyShiny] = useState(false);
   const [onlyTeam, setOnlyTeam] = useState(false);
@@ -72,11 +59,28 @@ export function InventoryView({
       .catch(() => {});
   };
 
+  const loadValuation = async (silent: boolean) => {
+    setLoadingVal(true);
+    try {
+      const val = await api.getInventoryValuation(accountFilter);
+      setValuation(val);
+    } catch (e) {
+      if (!silent) {
+        onToast(`Valoração: ${String(e)}`);
+      }
+    }
+    setLoadingVal(false);
+  };
+
   useEffect(() => {
     load();
     const id = setInterval(load, 5000);
     return () => clearInterval(id);
   }, [accountFilter, sortBy]);
+
+  useEffect(() => {
+    loadValuation(true);
+  }, [accountFilter]);
 
   const q = search.trim().toLowerCase();
   const filteredPks = pokemons.filter((p) => {
@@ -161,6 +165,117 @@ export function InventoryView({
         </div>
       </div>
 
+      {/* Valuation Summary Card (Gems / USD) */}
+      <div className="rounded-2xl bg-[#111525] border border-slate-800 p-4 space-y-3 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-fuchsia-500/15 border border-fuchsia-500/30 flex items-center justify-center text-fuchsia-300">
+              <DollarSign className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-semibold text-white">
+                Valoração Estimada (Média 7d + Cotação da Gema)
+              </div>
+              <div className="text-[11px] text-slate-400">
+                {valuation
+                  ? valuation.usdPerGem > 0
+                    ? `1 Gema ≈ $${valuation.usdPerGem.toFixed(4)} USD${
+                        valuation.pendingShinies > 0
+                          ? ` · +${valuation.pendingShinies} shinies aguardando atualização`
+                          : ""
+                      }`
+                    : "Cotação da Gema indisponível no momento"
+                  : "Clique em atualizar com pelo menos 1 conta online"}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {valuation && (
+              <div className="text-right">
+                <div className="font-mono font-bold text-base text-fuchsia-300">
+                  {fmtCompact(valuation.totalGems)} Gemas
+                </div>
+                {valuation.usdPerGem > 0 && (
+                  <div className="font-mono text-emerald-300 font-semibold">
+                    ≈ {fmtUsd(valuation.totalUsd)} USD
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              disabled={loadingVal}
+              onClick={() => loadValuation(false)}
+              title="Recalcular valoração do inventário"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loadingVal ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+        </div>
+
+        {valuation && (
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 px-3 py-2">
+                <div className="text-[10px] text-slate-400">Carteira Gemas</div>
+                <div className="font-mono font-semibold text-fuchsia-300">
+                  {fmtCompact(valuation.orbsBalance)}
+                </div>
+              </div>
+              <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 px-3 py-2">
+                <div className="text-[10px] text-slate-400">Itens Raros</div>
+                <div className="font-mono font-semibold text-amber-300">
+                  {fmtCompact(valuation.rareItemsGems)}
+                </div>
+              </div>
+              <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 px-3 py-2">
+                <div className="text-[10px] text-slate-400">
+                  Shinies ({valuation.pricedShinies}/{valuation.totalShinies})
+                </div>
+                <div className="font-mono font-semibold text-yellow-300">
+                  {fmtCompact(valuation.shiniesGems)}
+                </div>
+              </div>
+              <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 px-3 py-2">
+                <div className="text-[10px] text-slate-400">Outros Itens</div>
+                <div className="font-mono font-semibold text-sky-300">
+                  {fmtCompact(valuation.otherItemsGems)}
+                </div>
+              </div>
+            </div>
+
+            {(valuation.topEntries || []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {valuation.topEntries.slice(0, 6).map((entry) => (
+                  <div
+                    key={entry.key}
+                    className="rounded-lg bg-[#0b0e1b] border border-slate-800 px-2 py-1 inline-flex items-center gap-1.5 text-[11px]"
+                  >
+                    {entry.kind === "shiny" && entry.looktype ? (
+                      <PokemonSprite
+                        looktype={entry.looktype}
+                        bridgePort={bridgePort}
+                        size={18}
+                        shiny
+                      />
+                    ) : entry.icon ? (
+                      <ItemSprite icon={entry.icon} size={18} alt={entry.nome} />
+                    ) : null}
+                    <span className="text-slate-200">
+                      {entry.qty}× {entry.nome}
+                    </span>
+                    <span className="font-mono text-fuchsia-300 font-semibold">
+                      {fmtCompact(entry.totalGems)}g
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Sub-tabs */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-1 bg-[#111525] p-1 rounded-xl border border-slate-800 text-xs">
@@ -199,6 +314,8 @@ export function InventoryView({
               className="rounded-lg bg-[#111525] border border-slate-700 px-2.5 py-1.5 text-slate-200"
             >
               <option value="level">Ordenar: Nível</option>
+              <option value="pvp">Ordenar: Poder PvP</option>
+              <option value="pve">Ordenar: Poder PvE</option>
               <option value="nota">Ordenar: Nota</option>
               <option value="iv">Ordenar: IV</option>
               <option value="nome">Ordenar: Nome</option>
@@ -302,7 +419,7 @@ export function InventoryView({
                     Lv {pk.level}
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5">
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 flex-wrap">
                   <span className={GRADE_COLORS[pk.faixa] || "text-slate-300"}>
                     Nota <b>{pk.nota.toFixed(2)}</b>
                   </span>
@@ -310,6 +427,14 @@ export function InventoryView({
                   <span className="font-mono">IV {pk.ivPct.toFixed(0)}%</span>
                   <span>·</span>
                   <span>P{pk.potencia}</span>
+                  {pk.pvpPower > 0 && (
+                    <>
+                      <span>·</span>
+                      <span className="font-mono text-rose-300">
+                        PvP {fmtCompact(pk.pvpPower)}
+                      </span>
+                    </>
+                  )}
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
                   <span>{pk.accountNick}</span>
@@ -324,173 +449,14 @@ export function InventoryView({
         </div>
       )}
 
-      {/* PokemonSheet Modal with Hexagonal IV Radar + Birth Grade */}
+      {/* Complete Pokemon Sheet Modal (Hexagonal IV Radar + PvP/PvE Power + Branched Evolutions) */}
       {sheet && (
-        <div
-          onClick={() => setSheet(null)}
-          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg rounded-2xl bg-[#111525] border border-slate-700 shadow-2xl p-5 space-y-4"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <PokemonSprite
-                  looktype={sheet.looktype}
-                  bridgePort={bridgePort}
-                  size={64}
-                  shiny={sheet.shiny}
-                  className="rounded-xl bg-[#090c18] border border-slate-800"
-                />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-white">
-                      {sheet.apelido || sheet.nome}
-                    </h3>
-                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300">
-                      Lv {sheet.level}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    {sheet.accountNick} · Potência P{sheet.potencia} · Qualidade{" "}
-                    {sheet.qualidade.toFixed(2)}
-                  </div>
-                  <div className="flex gap-1 mt-1">
-                    {(sheet.tipos || []).map((t) => (
-                      <span
-                        key={t}
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white"
-                        style={{ backgroundColor: TYPE_COLOR[t.toUpperCase()] || "#475569" }}
-                      >
-                        {t.toUpperCase()}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setSheet(null)}
-                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Birth Grade Meter */}
-            <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 p-3 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Nota de Nascença</span>
-                <span className={`font-bold uppercase ${GRADE_COLORS[sheet.faixa]}`}>
-                  {sheet.nota.toFixed(2)} / 10 ({sheet.faixa})
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-sky-500 via-emerald-400 to-amber-400"
-                  style={{ width: `${Math.min(100, sheet.nota * 10)}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[11px] text-slate-500">
-                <span>
-                  Mercado:{" "}
-                  <b className={sheet.mercadoOk ? "text-emerald-400" : "text-rose-400"}>
-                    {sheet.mercadoOk ? "Elegível" : "Abaixo de 3.5"}
-                  </b>
-                </span>
-                <span>
-                  IV Total: <b className="text-white">{sheet.ivSoma}/192</b> (
-                  {sheet.ivPct.toFixed(1)}%)
-                </span>
-              </div>
-            </div>
-
-            {/* Hexagonal IV Radar + Stat Bars */}
-            <div className="grid grid-cols-2 gap-4 items-center">
-              <IVRadar ivs={sheet.ivs} />
-              <div className="space-y-1.5 text-xs">
-                {STAT_LABELS.map(([k, lbl]) => {
-                  const iv = sheet.ivs[k] || 0;
-                  const pct = Math.min(100, (iv / 32) * 100);
-                  return (
-                    <div key={k} className="space-y-0.5">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">{lbl}</span>
-                        <span className="font-mono text-slate-200">
-                          {iv}/32{" "}
-                          {sheet.stats[k] ? (
-                            <span className="text-slate-500">({sheet.stats[k]})</span>
-                          ) : null}
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                        <div
-                          className={`h-full ${
-                            iv >= 28
-                              ? "bg-amber-400"
-                              : iv >= 20
-                              ? "bg-emerald-400"
-                              : "bg-sky-400"
-                          }`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
+        <PokemonSheetModal
+          sheet={sheet}
+          bridgePort={bridgePort}
+          onClose={() => setSheet(null)}
+        />
       )}
     </div>
-  );
-}
-
-function IVRadar({ ivs }: { ivs: Record<string, number> }) {
-  const cx = 80;
-  const cy = 80;
-  const r = 56;
-  const pts = STAT_LABELS.map(([k], i) => {
-    const angle = (-Math.PI / 2) + (i * 2 * Math.PI) / 6;
-    const ratio = Math.min(1, Math.max(0.08, (ivs[k] || 0) / 32));
-    return {
-      x: cx + Math.cos(angle) * r * ratio,
-      y: cy + Math.sin(angle) * r * ratio,
-      lx: cx + Math.cos(angle) * (r + 16),
-      ly: cy + Math.sin(angle) * (r + 16),
-      gx: cx + Math.cos(angle) * r,
-      gy: cy + Math.sin(angle) * r,
-      label: STAT_LABELS[i][1],
-    };
-  });
-  const poly = pts.map((p) => `${p.x},${p.y}`).join(" ");
-  const outer = pts.map((p) => `${p.gx},${p.gy}`).join(" ");
-  return (
-    <svg viewBox="0 0 160 160" className="w-40 h-40 mx-auto">
-      <polygon points={outer} fill="#0b0e1b" stroke="#334155" strokeWidth="1" />
-      {pts.map((p, i) => (
-        <line key={i} x1={cx} y1={cy} x2={p.gx} y2={p.gy} stroke="#1e293b" strokeWidth="1" />
-      ))}
-      <polygon
-        points={poly}
-        fill="rgba(99, 102, 241, 0.35)"
-        stroke="#818cf8"
-        strokeWidth="2"
-      />
-      {pts.map((p, i) => (
-        <text
-          key={i}
-          x={p.lx}
-          y={p.ly}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize="9"
-          fill="#94a3b8"
-        >
-          {p.label}
-        </text>
-      ))}
-    </svg>
   );
 }

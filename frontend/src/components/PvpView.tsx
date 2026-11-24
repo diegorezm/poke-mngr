@@ -62,7 +62,7 @@ export function PvpView({
       setDraftTeam(current.team || []);
       setDraftHouses(current.houses || {});
       api
-        .listPokemons(current.accountId, "level")
+        .listPokemons(current.accountId, "pvp")
         .then((l) => setRoster(Array.isArray(l) ? l : []))
         .catch(() => {});
     } else if (sub === "ladder" && current) {
@@ -387,6 +387,8 @@ export function PvpView({
                         <div className="font-medium text-white truncate">{pk.apelido || pk.nome}</div>
                         <div className="text-[10px] text-slate-400">
                           Lv {pk.level} · Nota {pk.nota.toFixed(1)}
+                          {pk.pvpPower > 0 ? ` · PvP ${fmtCompact(pk.pvpPower)}` : ""}
+                          {pk.alcance > 0 ? ` · Alc ${pk.alcance}` : ""}
                         </div>
                       </div>
                     </div>

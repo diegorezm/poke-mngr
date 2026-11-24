@@ -97,8 +97,16 @@ export function GetInventory(accountID: number): $CancellablePromise<pokeidle$0.
     return $Call.ByID(2497382137, accountID);
 }
 
+export function GetInventoryValuation(accountID: number): $CancellablePromise<pokeidle$0.InventoryValuation | null> {
+    return $Call.ByID(3487553356, accountID);
+}
+
 export function GetLivesState(): $CancellablePromise<lives$0.CentralState> {
     return $Call.ByID(1661170239);
+}
+
+export function GetMarketGuideSeries(name: string, moeda: string, days: number): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(2910940212, name, moeda, days);
 }
 
 export function GetMarketGuideStats(days: number): $CancellablePromise<{ [_ in string]?: any } | null> {
@@ -107,6 +115,10 @@ export function GetMarketGuideStats(days: number): $CancellablePromise<{ [_ in s
 
 export function GetMarketItemListings(itemID: number, moeda: string, accountID: number): $CancellablePromise<{ [_ in string]?: any } | null> {
     return $Call.ByID(3496720269, itemID, moeda, accountID);
+}
+
+export function GetMarketListingDetail(listingID: number): $CancellablePromise<pokeidle$0.ListingDetail | null> {
+    return $Call.ByID(375987900, listingID);
 }
 
 export function GetMarketMyListings(accountID: number): $CancellablePromise<{ [_ in string]?: any } | null> {
@@ -127,6 +139,10 @@ export function GetMarketVitrine(filters: { [_ in string]?: any } | null, accoun
 
 export function GetMarketWallet(accountID: number): $CancellablePromise<{ [_ in string]?: any } | null> {
     return $Call.ByID(1519854006, accountID);
+}
+
+export function GetPublicPokemonSheet(nick: string, pokemonID: number): $CancellablePromise<pokeidle$0.PokemonDetail | null> {
+    return $Call.ByID(2150887858, nick, pokemonID);
 }
 
 export function GetPvpLadder(accountID: number, page: number): $CancellablePromise<{ [_ in string]?: any } | null> {
@@ -243,6 +259,10 @@ export function SendDailyReportNow(webhookURL: string): $CancellablePromise<void
 
 export function SetAutostart(enabled: boolean): $CancellablePromise<void> {
     return $Call.ByID(3531229700, enabled);
+}
+
+export function SetMarketSellAlert(enabled: boolean, pct: number): $CancellablePromise<void> {
+    return $Call.ByID(3170449023, enabled, pct);
 }
 
 export function SetPvpAuto(accountID: number, enabled: boolean): $CancellablePromise<void> {

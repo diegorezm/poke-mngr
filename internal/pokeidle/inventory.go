@@ -181,6 +181,8 @@ func (m *AccountManager) BuildInventory(accountID int) InventorySummary {
 }
 
 func (m *AccountManager) ListPokemons(accountID int, sortBy string) []PokemonDetail {
+	m.creatures.EnsureLoaded(context.Background())
+
 	m.mu.RLock()
 	conns := make([]*AccountConnection, 0, len(m.conns))
 	for _, c := range m.conns {
@@ -199,7 +201,7 @@ func (m *AccountManager) ListPokemons(accountID int, sortBy string) []PokemonDet
 		pks := asSlice(c.hunt.Estado["pokemons"])
 		for _, raw := range pks {
 			if pm := asMap(raw); pm != nil {
-				out = append(out, BuildPokemonDetail(accID, accNick, activeID, pm))
+				out = append(out, BuildPokemonDetailWithCatalog(accID, accNick, activeID, pm, m.creatures))
 			}
 		}
 		c.mu.RUnlock()

@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, MessageSquare } from "lucide-react";
-import { AccountTelemetry, ChatMessage } from "../lib/types";
+import { Send, MessageSquare, Sparkles, ShoppingCart, X } from "lucide-react";
+import {
+  AccountTelemetry,
+  ChatMessage,
+  ListingDetail,
+  PokemonDetail,
+  fmtCompact,
+} from "../lib/types";
 import { api } from "../lib/api";
+import { ItemSprite } from "./PokemonSprite";
+import { PokemonSheetModal } from "./PokemonSheetModal";
 
 const CHANNELS = [
   { id: "mundo", label: "Mundo" },
@@ -18,9 +26,11 @@ const CARGO_COLOR: Record<string, string> = {
 
 export function ChatView({
   accounts,
+  bridgePort,
   onToast,
 }: {
   accounts: AccountTelemetry[];
+  bridgePort: number;
   onToast: (msg: string) => void;
 }) {
   const [canal, setCanal] = useState<string>("mundo");
@@ -32,6 +42,10 @@ export function ChatView({
   const [speakerId, setSpeakerId] = useState<number>(0);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [publicSheet, setPublicSheet] = useState<PokemonDetail | null>(null);
+  const [adModal, setAdModal] = useState<ListingDetail | null>(null);
+  const [loadingModal, setLoadingModal] = useState(false);
+  const [buyingAd, setBuyingAd] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const onlineAccounts = accounts.filter((a) => a.state === "ONLINE");
@@ -93,6 +107,57 @@ export function ChatView({
       onToast(String(err));
     }
     setSending(false);
+  };
+
+  const handleOpenPublicPokemon = async (nick: string, pid: number) => {
+    setLoadingModal(true);
+    try {
+      const det = await api.getPublicPokemonSheet(nick, pid);
+      setPublicSheet(det);
+    } catch (err) {
+      onToast(`Ficha: ${String(err)}`);
+    }
+    setLoadingModal(false);
+  };
+
+  const handleOpenChatAd = async (listingId: number) => {
+    setLoadingModal(true);
+    try {
+      const det = await api.getMarketListingDetail(listingId);
+      setAdModal(det);
+    } catch (err) {
+      onToast(`Anúncio #${listingId}: ${String(err)}`);
+    }
+    setLoadingModal(false);
+  };
+
+  const handleBuyAd = async () => {
+    if (!adModal || !activeSpeaker) {
+      onToast("Nenhuma conta online selecionada para comprar.");
+      return;
+    }
+    const moedaLabel = adModal.moeda === "orb" ? "Gemas" : "Gold";
+    if (
+      !confirm(
+        `Comprar anúncio #${adModal.id} (${adModal.qtd}× ${adModal.nome} por ${fmtCompact(adModal.preco)} ${moedaLabel}) usando ${activeSpeaker.nick}?`
+      )
+    ) {
+      return;
+    }
+    const buyerAccountId = activeSpeaker.id;
+    const listingId = adModal.id;
+    const qty = adModal.qtd;
+    const price = adModal.preco;
+    const moeda = adModal.moeda;
+    setBuyingAd(true);
+    try {
+      const res = await api.buyMarketListing(buyerAccountId, listingId, qty, price, moeda);
+      onToast(`Mercado: ${res.status} — ${res.detail}`);
+      setAdModal(null);
+    } catch (err) {
+      onToast(`Falha na compra: ${String(err)}`);
+    }
+    setBuyingAd(false);
   };
 
   return (
@@ -166,6 +231,26 @@ export function ChatView({
                   </span>
                 )}
                 <span className="text-slate-200">{m.text}</span>
+                {m.pk && (
+                  <button
+                    type="button"
+                    disabled={loadingModal}
+                    onClick={() => handleOpenPublicPokemon(m.pk!.nick, m.pk!.id)}
+                    className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-500/20 hover:bg-indigo-500/35 text-indigo-200 border border-indigo-500/30 text-[11px] font-medium transition align-middle"
+                  >
+                    <Sparkles className="w-3 h-3" /> Ver ficha: {m.pk.label}
+                  </button>
+                )}
+                {m.ad && (
+                  <button
+                    type="button"
+                    disabled={loadingModal}
+                    onClick={() => handleOpenChatAd(m.ad!.id)}
+                    className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-500/30 text-[11px] font-medium transition align-middle"
+                  >
+                    <ShoppingCart className="w-3 h-3" /> Abrir anúncio #{m.ad.id}
+                  </button>
+                )}
               </div>
             );
           })
@@ -210,6 +295,75 @@ export function ChatView({
           <Send className="w-3.5 h-3.5" /> Enviar
         </button>
       </form>
+
+      {/* Public Pokémon Sheet Modal */}
+      {publicSheet && (
+        <PokemonSheetModal
+          sheet={publicSheet}
+          bridgePort={bridgePort}
+          onClose={() => setPublicSheet(null)}
+        />
+      )}
+
+      {/* Market Listing Modal (Pokémon sheet with buy button OR item listing card) */}
+      {adModal && adModal.pokemon && (
+        <PokemonSheetModal
+          sheet={adModal.pokemon}
+          bridgePort={bridgePort}
+          listing={adModal}
+          buying={buyingAd}
+          onBuy={handleBuyAd}
+          onClose={() => setAdModal(null)}
+        />
+      )}
+
+      {adModal && !adModal.pokemon && (
+        <div
+          onClick={() => setAdModal(null)}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl bg-[#111525] border border-slate-700 shadow-2xl p-5 space-y-4 text-xs"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <ItemSprite icon={adModal.itemIcon} size={44} alt={adModal.nome} />
+                <div>
+                  <div className="text-sm font-bold text-white">
+                    {adModal.qtd}× {adModal.nome || `Anúncio #${adModal.id}`}
+                  </div>
+                  <div className="text-slate-400">
+                    Anúncio #{adModal.id} · Vendedor: <b className="text-slate-200">{adModal.vendedor || "?"}</b>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setAdModal(null)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 p-3 flex items-center justify-between">
+              <div>
+                <div className="text-slate-400">Preço unitário</div>
+                <div className="font-mono text-base font-bold text-amber-300">
+                  {fmtCompact(adModal.preco)} {adModal.moeda === "orb" ? "Gemas" : "Gold"}
+                </div>
+              </div>
+              <button
+                disabled={buyingAd || !activeSpeaker}
+                onClick={handleBuyAd}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold inline-flex items-center gap-1.5 disabled:opacity-40"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                {buyingAd ? "Comprando..." : "Comprar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

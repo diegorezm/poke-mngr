@@ -396,6 +396,9 @@ func (s *Store) LoadGlobalSettings() config.GlobalSettings {
 	if gs.Language == "" {
 		gs.Language = "pt"
 	}
+	if gs.MarketSellAlertPct < 5 {
+		gs.MarketSellAlertPct = 30
+	}
 	return gs
 }
 

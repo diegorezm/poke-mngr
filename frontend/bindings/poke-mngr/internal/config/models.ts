@@ -58,6 +58,8 @@ export interface GlobalSettings {
      */
     "language": string;
     "sniperEnabled": boolean;
+    "marketSellAlert": boolean;
+    "marketSellAlertPct": number;
 
     /**
      * grid | columns | focus

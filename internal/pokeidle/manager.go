@@ -30,6 +30,7 @@ type AccountManager struct {
 	official *OfficialStreamers
 	chat     *ChatHub
 	market   *MarketService
+	fichas   *PublicFichaHub
 
 	conns map[int]*AccountConnection
 
@@ -58,6 +59,7 @@ func NewAccountManager(st *store.Store) *AccountManager {
 		sprites:   sprites,
 		official:  official,
 		chat:      NewChatHub(),
+		fichas:    NewPublicFichaHub(),
 		conns:     map[int]*AccountConnection{},
 		dirtyCh:   make(chan struct{}, 1),
 	}
@@ -351,6 +353,9 @@ func (m *AccountManager) spawnLocked(acc config.AccountRecord) {
 	}
 	conn.onChatFrame = func(accID int, frame map[string]any) {
 		m.chat.HandleFrame(accID, acc.Nick, frame)
+	}
+	conn.onFichaFrame = func(_ int, frame map[string]any) {
+		m.fichas.HandleFrame(frame)
 	}
 	m.conns[acc.ID] = conn
 	if m.ctx != nil {

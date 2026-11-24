@@ -127,6 +127,24 @@ export interface EquippedItem {
     "stock": number;
 }
 
+export interface EvoStep {
+    "pokeId": number;
+    "nome": string;
+    "looktype": number;
+    "level": number;
+}
+
+export interface EvolutionProjection {
+    "pokeId": number;
+    "nome": string;
+    "looktype": number;
+    "nota": number;
+    "faixa": string;
+    "mercadoOk": boolean;
+    "pvpPower": number;
+    "alcance": number;
+}
+
 export interface HuntInfo {
     "slug": string;
     "nome": string;
@@ -207,6 +225,39 @@ export interface InventorySummary {
     "items": InventoryItemEntry[] | null;
 }
 
+export interface InventoryValuation {
+    "usdPerGem": number;
+    "orbsBalance": number;
+    "rareItemsGems": number;
+    "otherItemsGems": number;
+    "shiniesGems": number;
+    "totalGems": number;
+    "totalUsd": number;
+    "pricedShinies": number;
+    "totalShinies": number;
+    "pendingShinies": number;
+    "topEntries": ValuationItem[] | null;
+}
+
+export interface ListingDetail {
+    "id": number;
+
+    /**
+     * item | pokemon
+     */
+    "kind": string;
+    "nome": string;
+    "qtd": number;
+    "preco": number;
+    "moeda": string;
+    "vendedor": string;
+    "estado": string;
+    "compravelEm"?: number;
+    "itemId"?: number;
+    "itemIcon"?: string;
+    "pokemon"?: PokemonDetail | null;
+}
+
 export interface MarketBuyResult {
     /**
      * comprado | perdeu_sorteio | recusado | timeout
@@ -233,6 +284,7 @@ export interface PokemonDetail {
     "id": number;
     "accountId": number;
     "accountNick": string;
+    "owner"?: string;
     "pokeId": number;
     "nome": string;
     "apelido": string;
@@ -240,6 +292,7 @@ export interface PokemonDetail {
     "level": number;
     "hp": number;
     "maxHp": number;
+    "combatHp": number;
     "xp": number;
     "xpProximo": number;
     "shiny": boolean;
@@ -259,6 +312,13 @@ export interface PokemonDetail {
     "faixa": string;
     "mercadoOk": boolean;
     "eixos": { [_ in string]?: number } | null;
+    "pvpPower": number;
+    "pvpLevel": number;
+    "pvePower": number;
+    "alcance": number;
+    "evoPrev"?: EvoStep | null;
+    "evoNext"?: EvoStep[] | null;
+    "evolucoes"?: EvolutionProjection[] | null;
 }
 
 export interface PokemonSummary {
@@ -336,4 +396,20 @@ export interface TelemetrySnapshot {
     "bridgePort": number;
     "memory"?: sysmem$0.Stats | null;
     "accounts": AccountTelemetry[] | null;
+}
+
+export interface ValuationItem {
+    "key": string;
+
+    /**
+     * rare | item | shiny
+     */
+    "kind": string;
+    "nome": string;
+    "icon"?: string;
+    "looktype"?: number;
+    "qty": number;
+    "unitGems": number;
+    "totalGems": number;
+    "totalUsd": number;
 }

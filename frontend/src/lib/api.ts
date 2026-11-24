@@ -8,6 +8,8 @@ import type {
   GlobalSettings,
   HuntsCatalog,
   InventorySummary,
+  InventoryValuation,
+  ListingDetail,
   LivesAccountConfig,
   LivesCentralState,
   MarketLogEntry,
@@ -100,6 +102,16 @@ export const api = {
       moeda
     ),
   getMarketGuideStats: (days: number) => invoke<Record<string, unknown>>("GetMarketGuideStats", days),
+  getMarketGuideSeries: (name: string, moeda: string, days: number) =>
+    invoke<Record<string, unknown>>("GetMarketGuideSeries", name, moeda, days),
+  getMarketListingDetail: (listingId: number) =>
+    invoke<ListingDetail>("GetMarketListingDetail", listingId),
+  getPublicPokemonSheet: (nick: string, pokemonId: number) =>
+    invoke<PokemonDetail>("GetPublicPokemonSheet", nick, pokemonId),
+  getInventoryValuation: (accountId: number) =>
+    invoke<InventoryValuation>("GetInventoryValuation", accountId),
+  setMarketSellAlert: (enabled: boolean, pct: number) =>
+    invoke<void>("SetMarketSellAlert", enabled, pct),
   toggleMarketFav: (itemId: number) => invoke<boolean>("ToggleMarketFav", itemId),
   listMarketRules: () => invoke<MarketRule[]>("ListMarketRules"),
   saveMarketRule: (rule: MarketRule) => invoke<MarketRule>("SaveMarketRule", rule),

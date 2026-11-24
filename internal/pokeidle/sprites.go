@@ -366,14 +366,32 @@ func (ic *ItemCatalog) BestCostPotion(maxHP int, hpThreshold float64) int {
 	return bestID
 }
 
-// --- CreatureCatalog (for hunt sprites, types, and loot — matches actions_api.py) ---
+// --- CreatureCatalog (for hunt sprites, types, stats, attacks, evolutions, and loot) ---
+
+type CreatureAttack struct {
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	Category   string `json:"category"`
+	Power      int    `json:"power"`
+	CooldownMs int    `json:"cooldownMs"`
+	LearnLevel int    `json:"learnLevel"`
+}
 
 type CreatureMeta struct {
-	PokeID   int
-	Name     string
-	Looktype int
-	Types    []string
-	Loot     []string
+	PokeID      int
+	Name        string
+	Looktype    int
+	Types       []string
+	Loot        []string
+	BaseHP      int
+	BaseAtk     int
+	BaseDef     int
+	BaseSpAtk   int
+	BaseSpDef   int
+	BaseSpeed   int
+	EvolvesToID int
+	EvolveLevel int
+	Attacks     []CreatureAttack
 }
 
 var outlandPrefixes = []string{
@@ -474,12 +492,42 @@ func (cc *CreatureCatalog) EnsureLoaded(ctx context.Context) {
 					}
 				}
 			}
+			var attacks []CreatureAttack
+			for _, ar := range asSlice(c["attacks"]) {
+				if am := asMap(ar); am != nil {
+					ll := asInt(am["learnLevel"])
+					if ll <= 0 {
+						ll = 1
+					}
+					cd := asInt(am["cooldownMs"])
+					if cd <= 0 {
+						cd = 2000
+					}
+					attacks = append(attacks, CreatureAttack{
+						Name:       asString(am["name"]),
+						Type:       strings.ToUpper(asString(am["type"])),
+						Category:   strings.ToUpper(asString(am["category"])),
+						Power:      asInt(am["power"]),
+						CooldownMs: cd,
+						LearnLevel: ll,
+					})
+				}
+			}
 			cm := CreatureMeta{
-				PokeID:   pid,
-				Name:     asString(c["name"]),
-				Looktype: asInt(c["looktype"]),
-				Types:    tipos,
-				Loot:     loot,
+				PokeID:      pid,
+				Name:        asString(c["name"]),
+				Looktype:    asInt(c["looktype"]),
+				Types:       tipos,
+				Loot:        loot,
+				BaseHP:      asInt(c["baseHp"]),
+				BaseAtk:     asInt(c["baseAtk"]),
+				BaseDef:     asInt(c["baseDef"]),
+				BaseSpAtk:   asInt(c["baseSpAtk"]),
+				BaseSpDef:   asInt(c["baseSpDef"]),
+				BaseSpeed:   asInt(c["baseSpeed"]),
+				EvolvesToID: asInt(c["evolvesToId"]),
+				EvolveLevel: asInt(c["evolveLevel"]),
+				Attacks:     attacks,
 			}
 			byID[pid] = cm
 			if pid <= 1025 && cm.Name != "" {
@@ -554,6 +602,40 @@ func (cc *CreatureCatalog) ByName(name string) (CreatureMeta, bool) {
 	defer cc.mu.RUnlock()
 	m, ok := cc.byName[strings.ToLower(strings.TrimSpace(name))]
 	return m, ok
+}
+
+func (cc *CreatureCatalog) All() map[int]CreatureMeta {
+	if cc == nil {
+		return nil
+	}
+	cc.mu.RLock()
+	defer cc.mu.RUnlock()
+	out := make(map[int]CreatureMeta, len(cc.byID))
+	for k, v := range cc.byID {
+		out[k] = v
+	}
+	return out
+}
+
+func (cc *CreatureCatalog) FindForPokemon(pk map[string]any) (CreatureMeta, bool) {
+	if cc == nil || pk == nil {
+		return CreatureMeta{}, false
+	}
+	for _, key := range []string{"speciesId", "pokeId"} {
+		if id := asInt(pk[key]); id > 0 {
+			if m, ok := cc.Get(id); ok {
+				return m, true
+			}
+		}
+	}
+	for _, key := range []string{"nome", "especie"} {
+		if nm := asString(pk[key]); nm != "" {
+			if m, ok := cc.ByName(nm); ok {
+				return m, true
+			}
+		}
+	}
+	return CreatureMeta{}, false
 }
 
 // --- Sprite Atlas & Outfit Proxy ---

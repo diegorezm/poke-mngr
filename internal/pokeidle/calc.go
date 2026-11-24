@@ -43,35 +43,44 @@ var gradeTiers = []GradeTier{
 }
 
 type PokemonDetail struct {
-	ID          int                `json:"id"`
-	AccountID   int                `json:"accountId"`
-	AccountNick string             `json:"accountNick"`
-	PokeID      int                `json:"pokeId"`
-	Name        string             `json:"nome"`
-	Nickname    string             `json:"apelido"`
-	Species     string             `json:"especie"`
-	Level       int                `json:"level"`
-	HP          int                `json:"hp"`
-	MaxHP       int                `json:"maxHp"`
-	XP          int64              `json:"xp"`
-	XPNext      int64              `json:"xpProximo"`
-	Shiny       bool               `json:"shiny"`
-	Looktype    int                `json:"looktype"`
-	InTeam      bool               `json:"noTime"`
-	Active      bool               `json:"ativo"`
-	Locked      bool               `json:"trancado"`
-	Quality     float64            `json:"qualidade"`
-	Potency     int                `json:"potencia"`
-	HeldItemID  int                `json:"heldItemId"`
-	IVs         map[string]int     `json:"ivs"`
-	IVSum       int                `json:"ivSoma"`
-	IVPct       float64            `json:"ivPct"`
-	Stats       map[string]int     `json:"stats"`
-	Types       []string           `json:"tipos"`
-	Grade       float64            `json:"nota"`
-	GradeTier   string             `json:"faixa"`
-	MarketOK    bool               `json:"mercadoOk"`
-	GradeAxes   map[string]float64 `json:"eixos"`
+	ID          int                   `json:"id"`
+	AccountID   int                   `json:"accountId"`
+	AccountNick string                `json:"accountNick"`
+	Owner       string                `json:"owner,omitempty"`
+	PokeID      int                   `json:"pokeId"`
+	Name        string                `json:"nome"`
+	Nickname    string                `json:"apelido"`
+	Species     string                `json:"especie"`
+	Level       int                   `json:"level"`
+	HP          int                   `json:"hp"`
+	MaxHP       int                   `json:"maxHp"`
+	CombatHP    int                   `json:"combatHp"`
+	XP          int64                 `json:"xp"`
+	XPNext      int64                 `json:"xpProximo"`
+	Shiny       bool                  `json:"shiny"`
+	Looktype    int                   `json:"looktype"`
+	InTeam      bool                  `json:"noTime"`
+	Active      bool                  `json:"ativo"`
+	Locked      bool                  `json:"trancado"`
+	Quality     float64               `json:"qualidade"`
+	Potency     int                   `json:"potencia"`
+	HeldItemID  int                   `json:"heldItemId"`
+	IVs         map[string]int        `json:"ivs"`
+	IVSum       int                   `json:"ivSoma"`
+	IVPct       float64               `json:"ivPct"`
+	Stats       map[string]int        `json:"stats"`
+	Types       []string              `json:"tipos"`
+	Grade       float64               `json:"nota"`
+	GradeTier   string                `json:"faixa"`
+	MarketOK    bool                  `json:"mercadoOk"`
+	GradeAxes   map[string]float64    `json:"eixos"`
+	PvpPower    int                   `json:"pvpPower"`
+	PvpLevel    int                   `json:"pvpLevel"`
+	PvePower    int                   `json:"pvePower"`
+	Range       int                   `json:"alcance"`
+	DirectPrev  *EvoStep              `json:"evoPrev,omitempty"`
+	DirectNext  []EvoStep             `json:"evoNext,omitempty"`
+	Evolutions  []EvolutionProjection `json:"evolucoes,omitempty"`
 }
 
 func jsRound(v float64) float64 {
@@ -121,12 +130,16 @@ func birthSum(ivs map[string]int, quality float64, potency int, shiny bool, base
 }
 
 func ComputeBirthGrade(ivs map[string]int, quality float64, potency int, shiny bool) (float64, string, map[string]float64) {
+	return ComputeBirthGradeWithBases(ivs, quality, potency, shiny, nil)
+}
+
+func ComputeBirthGradeWithBases(ivs map[string]int, quality float64, potency int, shiny bool, bases map[string]float64) (float64, string, map[string]float64) {
 	loIV := map[string]int{"hp": 1, "atk": 1, "def": 1, "spAtk": 1, "spDef": 1, "speed": 1}
 	hiIV := map[string]int{"hp": 32, "atk": 32, "def": 32, "spAtk": 32, "spDef": 32, "speed": 32}
 
-	lo := birthSum(loIV, 0.8, 1, false, nil)
-	hi := birthSum(hiIV, 1.8, 5, true, nil)
-	cur := clampF(birthSum(ivs, quality, potency, shiny, nil), lo, hi)
+	lo := birthSum(loIV, 0.8, 1, false, bases)
+	hi := birthSum(hiIV, 1.8, 5, true, bases)
+	cur := clampF(birthSum(ivs, quality, potency, shiny, bases), lo, hi)
 
 	raw := 0.0
 	if hi > lo {
@@ -151,10 +164,10 @@ func ComputeBirthGrade(ivs map[string]int, quality float64, potency int, shiny b
 		return d
 	}
 	axes := map[string]float64{
-		"iv":        gain(birthSum(loIV, quality, potency, shiny, nil)),
-		"qualidade": gain(birthSum(ivs, 0.8, potency, shiny, nil)),
-		"potencia":  gain(birthSum(ivs, quality, 1, shiny, nil)),
-		"shiny":     gain(birthSum(ivs, quality, potency, false, nil)),
+		"iv":        gain(birthSum(loIV, quality, potency, shiny, bases)),
+		"qualidade": gain(birthSum(ivs, 0.8, potency, shiny, bases)),
+		"potencia":  gain(birthSum(ivs, quality, 1, shiny, bases)),
+		"shiny":     gain(birthSum(ivs, quality, potency, false, bases)),
 	}
 	sumA := 0.0
 	for _, v := range axes {
@@ -169,6 +182,10 @@ func ComputeBirthGrade(ivs map[string]int, quality float64, potency int, shiny b
 }
 
 func BuildPokemonDetail(accID int, accNick string, activeID int, pk map[string]any) PokemonDetail {
+	return BuildPokemonDetailWithCatalog(accID, accNick, activeID, pk, nil)
+}
+
+func BuildPokemonDetailWithCatalog(accID int, accNick string, activeID int, pk map[string]any, cc *CreatureCatalog) PokemonDetail {
 	ivsRaw := asMap(pk["ivs"])
 	ivs := map[string]int{}
 	ivSum := 0
@@ -194,7 +211,20 @@ func BuildPokemonDetail(accID int, accNick string, activeID int, pk map[string]a
 		potency = 1
 	}
 	shiny := asBool(pk["shiny"])
-	grade, tier, axes := ComputeBirthGrade(ivs, quality, potency, shiny)
+
+	var spPtr *CreatureMeta
+	var bases map[string]float64
+	if cc != nil {
+		if sp, ok := cc.FindForPokemon(pk); ok {
+			spCopy := sp
+			spPtr = &spCopy
+			if spCopy.BaseHP > 0 || spCopy.BaseAtk > 0 {
+				bases = speciesBasesMap(&spCopy, asMap(pk["refino"]))
+			}
+		}
+	}
+
+	grade, tier, axes := ComputeBirthGradeWithBases(ivs, quality, potency, shiny, bases)
 
 	tipos := []string{}
 	for _, tr := range asSlice(pk["tipos"]) {
@@ -202,27 +232,64 @@ func BuildPokemonDetail(accID int, accNick string, activeID int, pk map[string]a
 			tipos = append(tipos, s)
 		}
 	}
+	if len(tipos) == 0 && spPtr != nil && len(spPtr.Types) > 0 {
+		tipos = append(tipos, spPtr.Types...)
+	}
 
 	id := asInt(pk["id"])
 	name := asString(pk["nome"])
 	if name == "" {
 		name = asString(pk["especie"])
 	}
+	if name == "" && spPtr != nil {
+		name = spPtr.Name
+	}
+	pokeID := asInt(pk["speciesId"])
+	if pokeID == 0 {
+		pokeID = asInt(pk["pokeId"])
+	}
+	if pokeID == 0 && spPtr != nil {
+		pokeID = spPtr.PokeID
+	}
+	look := lookOf(pk)
+	if look == 0 && spPtr != nil {
+		look = spPtr.Looktype
+	}
+	level := asInt(pk["level"])
+	if level < 1 {
+		level = 1
+	}
+
+	var pvpPwr, pvePwr int
+	var directPrev *EvoStep
+	var directNext []EvoStep
+	var evolutions []EvolutionProjection
+	rng := 1
+	if spPtr != nil {
+		pvpPwr = PvpPower(pk, spPtr)
+		pvePwr = PvePower(pk, spPtr)
+		rng = SpeciesRange(spPtr)
+		all := cc.All()
+		directPrev, directNext = DirectEvolutions(*spPtr, all)
+		evolutions = FinalEvolutionProjections(pk, *spPtr, all, ivs, quality, potency, shiny)
+	}
+
 	return PokemonDetail{
 		ID:          id,
 		AccountID:   accID,
 		AccountNick: accNick,
-		PokeID:      asInt(pk["pokeId"]),
+		PokeID:      pokeID,
 		Name:        name,
 		Nickname:    asString(pk["apelido"]),
 		Species:     asString(pk["especie"]),
-		Level:       asInt(pk["level"]),
+		Level:       level,
 		HP:          asInt(pk["hp"]),
 		MaxHP:       asInt(pk["maxHp"]),
+		CombatHP:    CombatHP(stats),
 		XP:          asInt64(pk["xp"]),
 		XPNext:      asInt64(pk["xpProximo"]),
 		Shiny:       shiny,
-		Looktype:    lookOf(pk),
+		Looktype:    look,
 		InTeam:      asBool(pk["noTime"]) || asBool(pk["time"]) || id == activeID,
 		Active:      id == activeID,
 		Locked:      asBool(pk["trancado"]) || asBool(pk["protegido"]),
@@ -238,12 +305,27 @@ func BuildPokemonDetail(accID int, accNick string, activeID int, pk map[string]a
 		GradeTier:   tier,
 		MarketOK:    shiny || potency >= 5 || grade >= 3.5,
 		GradeAxes:   axes,
+		PvpPower:    pvpPwr,
+		PvpLevel:    ArenaLevel(level),
+		PvePower:    pvePwr,
+		Range:       rng,
+		DirectPrev:  directPrev,
+		DirectNext:  directNext,
+		Evolutions:  evolutions,
 	}
 }
 
 func SortPokemons(list []PokemonDetail, sortBy string) {
 	sort.Slice(list, func(i, j int) bool {
 		switch sortBy {
+		case "pvp":
+			if list[i].PvpPower != list[j].PvpPower {
+				return list[i].PvpPower > list[j].PvpPower
+			}
+		case "pve":
+			if list[i].PvePower != list[j].PvePower {
+				return list[i].PvePower > list[j].PvePower
+			}
 		case "nota":
 			if list[i].Grade != list[j].Grade {
 				return list[i].Grade > list[j].Grade

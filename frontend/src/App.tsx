@@ -72,6 +72,8 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   cardStyle: "padrao",
   language: "pt",
   sniperEnabled: false,
+  marketSellAlert: false,
+  marketSellAlertPct: 30,
   deckLayout: "grid",
   deckZoom: 1.0,
   deckUltra: false,
@@ -361,13 +363,19 @@ export function App() {
           )}
 
           {tab === "chat" && (
-            <ChatView accounts={snap.accounts} onToast={showToast} />
+            <ChatView
+              accounts={snap.accounts}
+              bridgePort={snap.bridgePort}
+              onToast={showToast}
+            />
           )}
 
           {tab === "mercado" && (
             <MarketView
               accounts={snap.accounts}
               bridgePort={snap.bridgePort}
+              settings={settings}
+              onSettingsChange={setSettings}
               onToast={showToast}
             />
           )}
