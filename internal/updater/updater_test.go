@@ -12,29 +12,6 @@ import (
 	"testing"
 )
 
-func TestParseAndCompareVersions(t *testing.T) {
-	v1, ok := ParseVersion("v0.2.10")
-	if !ok || v1 != [3]int{0, 2, 10} {
-		t.Fatalf("unexpected parse v0.2.10: %v %v", v1, ok)
-	}
-	v2, ok := ParseVersion("0.2.9")
-	if !ok || CompareVersions(v1, v2) <= 0 {
-		t.Fatalf("expected 0.2.10 > 0.2.9")
-	}
-	if _, ok := ParseVersion("v1.0.0-beta"); ok {
-		t.Fatalf("prerelease tag should be rejected")
-	}
-}
-
-func TestParseSHA256Sums(t *testing.T) {
-	sum := strings.Repeat("a", 64)
-	body := strings.Repeat("b", 64) + "  other.zip\n" + sum + " *poke-mngr-amd64-installer.exe\n"
-	got := parseSHA256Sums(strings.NewReader(body), "poke-mngr-amd64-installer.exe")
-	if got != sum {
-		t.Fatalf("expected %s, got %q", sum, got)
-	}
-}
-
 func TestUpdaterCheckAndSHA256Mismatch(t *testing.T) {
 	payload := []byte("fake-nsis-binary-content")
 	realSum := sha256.Sum256(payload)

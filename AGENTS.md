@@ -131,9 +131,20 @@ O compilador pula silenciosamente (sem falhar o build) componentes/hooks que con
 
 ---
 
-## 6. Checklist Antes de Finalizar Alterações
+## 6. Política de Testes (Minimalista — Apenas o Essencial)
+
+- **NÃO crie testes além do estritamente necessário.** Evite inflar a suíte com testes triviais ou de baixa utilidade.
+- **Só crie ou mantenha testes que cubram:**
+  1. **Features relevantes do produto** com regras não triviais (ex.: limite de contas, recompra com piso de ouro/histerese, regras de preço do sniper/mercado, deduplicação de shinies/chat, rollover de relatório diário, alocação de slots de lives);
+  2. **Segurança crítica** (ex.: verificação SHA-256 do updater, bloqueio de zip-slip no `.xpi`);
+  3. **Regressões de falhas graves** (ex.: deadlocks reais de concorrência em `ac.mu`).
+- **NÃO crie testes** para helpers triviais (comparadores de versão, formatação de string/data, parsers JSON simples, getters/setters, `strings.Contains` em templates JS, limpeza simples de cache ou smoke tests de métricas).
+
+---
+
+## 7. Checklist Antes de Finalizar Alterações
 
 - [ ] **Frontend alterado:** rodar `cd frontend; npm run build` (sem erros de TypeScript e mantendo 0 bailouts no React Compiler) e verificar ambos os temas (**Light** e **Dark**).
 - [ ] **Backend alterado:** rodar `$env:CGO_ENABLED="0"; go vet ./...`, `go test -count=1 ./internal/...` e `go build . ./cmd/server ./internal/...`.
-- [ ] **Novos bugs de concorrência ou regras críticas:** adicionar teste de regressão em `*_test.go`.
+- [ ] **Testes:** só adicionar novo teste se cobrir uma feature relevante, regra de segurança ou regressão grave (seguindo a Seção 6).
 - [ ] **Não editar `frontend/bindings/` manualmente** e não commitar arquivos temporários (`mocks/`, `.refs/`).

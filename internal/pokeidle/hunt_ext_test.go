@@ -3,9 +3,6 @@ package pokeidle
 import (
 	"archive/zip"
 	"bytes"
-	"context"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -50,8 +47,8 @@ func TestHuntExtensionInstallAndScripts(t *testing.T) {
 				}
 			]
 		}`,
-		"styles/hunt.css":          `.pih-badge { color: gold; }`,
-		"scripts/main.js":          `window.__pihLoaded = true;`,
+		"styles/hunt.css":            `.pih-badge { color: gold; }`,
+		"scripts/main.js":            `window.__pihLoaded = true;`,
 		"scripts/isolated-bridge.js": `console.log("should not inject isolated world");`,
 	})
 
@@ -63,7 +60,6 @@ func TestHuntExtensionInstallAndScripts(t *testing.T) {
 		t.Fatalf("expected version 1.2.10, got %q", ver)
 	}
 
-	// Reload from disk into a fresh instance
 	ext2 := NewHuntExtensionWithDir(dir)
 	ext2.Load()
 	st := ext2.Status(true)
@@ -98,40 +94,5 @@ func TestHuntExtensionZipSlipRejected(t *testing.T) {
 	})
 	if _, err := ext.InstallFromXPI(bad); err == nil {
 		t.Fatalf("expected zip-slip path to be rejected")
-	}
-}
-
-func TestHuntExtensionWishlistFallback(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/fail" {
-			http.Error(w, "down", http.StatusBadGateway)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"itens":["Pikachu"]}`))
-	}))
-	defer srv.Close()
-
-	ext := NewHuntExtensionWithDir(t.TempDir())
-	ext.wishlistURLs = []string{srv.URL + "/fail", srv.URL + "/ok"}
-
-	body, err := ext.FetchWishlist(context.Background())
-	if err != nil {
-		t.Fatalf("FetchWishlist failed: %v", err)
-	}
-	if !strings.Contains(string(body), "Pikachu") {
-		t.Fatalf("unexpected wishlist body: %s", string(body))
-	}
-}
-
-func TestCompareDotVersions(t *testing.T) {
-	if compareDotVersions("1.0.19", "1.0.9") <= 0 {
-		t.Fatalf("expected 1.0.19 > 1.0.9")
-	}
-	if compareDotVersions("1.1", "1.0.20") <= 0 {
-		t.Fatalf("expected 1.1 > 1.0.20")
-	}
-	if compareDotVersions("1.2.3", "1.2.3") != 0 {
-		t.Fatalf("expected 1.2.3 == 1.2.3")
 	}
 }

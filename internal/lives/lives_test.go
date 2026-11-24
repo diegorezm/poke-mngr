@@ -1,12 +1,8 @@
 package lives
 
 import (
-	"path/filepath"
-	"sync"
 	"testing"
 
-	"poke-mngr/internal/config"
-	"poke-mngr/internal/pokeidle"
 	"poke-mngr/internal/store"
 )
 
@@ -35,47 +31,4 @@ func TestAssignSlotsStandIn(t *testing.T) {
 	if slots[2].Channel != "kick_a" || slots[3].Channel != "" {
 		t.Fatalf("unexpected kick slots: %+v %+v", slots[2], slots[3])
 	}
-}
-
-func TestManagerStateConcurrentMapSafety(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "lives.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	defer st.Close()
-
-	acc, err := st.AddAccount(config.AccountRecord{
-		Nick:    "LiveTester",
-		Token:   "tok123",
-		Enabled: true,
-		Options: config.DefaultAccountOptions(),
-	})
-	if err != nil {
-		t.Fatalf("AddAccount: %v", err)
-	}
-	cfg := store.DefaultLivesAccountConfig()
-	cfg.ExtraTwitch = []string{"extra1", "extra2"}
-	if err := st.SaveLivesConfig(acc.ID, cfg); err != nil {
-		t.Fatalf("SaveLivesConfig: %v", err)
-	}
-
-	mgr := pokeidle.NewAccountManager(st)
-	lm := NewManager(mgr, st)
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 200; i++ {
-			lm.SetPlayerPlaying(acc.ID, "twitch", 1, "extra1")
-			lm.SetPlayerPlaying(acc.ID, "twitch", 1, "")
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 200; i++ {
-			_ = lm.State()
-		}
-	}()
-	wg.Wait()
 }

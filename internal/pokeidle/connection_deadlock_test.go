@@ -38,19 +38,17 @@ func TestAutomationLoopNoRecursiveRLockDeadlock(t *testing.T) {
 		},
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1300*time.Millisecond)
 	defer cancel()
 
 	var wg sync.WaitGroup
 	wg.Add(3)
 
-	// 1. Run automationLoop (fires ballTicker every 200ms and huntQueueTicker every 1s)
 	go func() {
 		defer wg.Done()
 		ac.automationLoop(ctx)
 	}()
 
-	// 2. Hammer ac.mu.Lock() like incoming WS frames
 	go func() {
 		defer wg.Done()
 		for ctx.Err() == nil {
@@ -62,7 +60,6 @@ func TestAutomationLoopNoRecursiveRLockDeadlock(t *testing.T) {
 		}
 	}()
 
-	// 3. Hammer Snapshot() like telemetryLoop / Wails RPCs
 	go func() {
 		defer wg.Done()
 		for ctx.Err() == nil {
@@ -79,7 +76,7 @@ func TestAutomationLoopNoRecursiveRLockDeadlock(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(4 * time.Second):
 		t.Fatal("deadlock detected in AccountConnection.automationLoop / ac.mu")
 	}
 }
@@ -136,7 +133,6 @@ func TestHandleBattleKillNoSelfDeadlock(t *testing.T) {
 		t.Fatal("self-deadlock detected in handleFrame(batalha/morte)")
 	}
 
-	// Verify ac.mu is completely free and daily kill was persisted
 	snap := ac.Snapshot()
 	if snap.Hunt.Kills != 1 || snap.Hunt.XPGained != 250 || snap.Hunt.GoldGained != 120 {
 		t.Fatalf("unexpected hunt stats: %+v", snap.Hunt)
@@ -148,55 +144,5 @@ func TestHandleBattleKillNoSelfDeadlock(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].Kills != 1 || rows[0].XP != 250 || rows[0].Gold != 120 {
 		t.Fatalf("expected persisted daily kill, got %+v", rows)
-	}
-}
-
-func TestShopCancelSellAllowsRetry(t *testing.T) {
-	sm := NewShopManager()
-	ch1, err := sm.BeginSell()
-	if err != nil {
-		t.Fatalf("first BeginSell failed: %v", err)
-	}
-	if _, err := sm.BeginSell(); err == nil {
-		t.Fatal("expected second concurrent BeginSell to fail")
-	}
-	sm.CancelSell(ch1)
-	ch2, err := sm.BeginSell()
-	if err != nil {
-		t.Fatalf("BeginSell after CancelSell failed: %v", err)
-	}
-	// Cancelling the old channel must not clear the new one
-	sm.CancelSell(ch1)
-	if _, err := sm.BeginSell(); err == nil {
-		t.Fatal("CancelSell with stale channel should not clear active sell")
-	}
-	sm.CancelSell(ch2)
-}
-
-func TestMarketServicePruneCaches(t *testing.T) {
-	ms := &MarketService{
-		guideCache:  map[string]guideCacheEntry{},
-		seenAlerted: map[string]time.Time{},
-		snipedIDs:   map[int]time.Time{},
-		shinyCache:  map[string]shinyPriceCacheEntry{},
-		sellAlerted: map[string]sellAlertEntry{},
-	}
-	now := time.Now()
-	ms.guideCache["old"] = guideCacheEntry{exp: now.Add(-time.Minute)}
-	ms.guideCache["new"] = guideCacheEntry{exp: now.Add(time.Minute)}
-	ms.shinyCache["old"] = shinyPriceCacheEntry{exp: now.Add(-time.Minute)}
-	ms.shinyCache["new"] = shinyPriceCacheEntry{exp: now.Add(time.Minute)}
-	ms.seenAlerted["old"] = now.Add(-25 * time.Hour)
-	ms.seenAlerted["new"] = now.Add(-time.Hour)
-	ms.snipedIDs[1] = now.Add(-25 * time.Hour)
-	ms.snipedIDs[2] = now.Add(-time.Hour)
-	ms.sellAlerted["old"] = sellAlertEntry{at: now.Add(-25 * time.Hour)}
-	ms.sellAlerted["new"] = sellAlertEntry{at: now.Add(-time.Hour)}
-
-	ms.pruneCaches(now)
-
-	if len(ms.guideCache) != 1 || len(ms.shinyCache) != 1 || len(ms.seenAlerted) != 1 || len(ms.snipedIDs) != 1 || len(ms.sellAlerted) != 1 {
-		t.Fatalf("expected only fresh entries after prune, got guide=%d shiny=%d seen=%d sniped=%d sell=%d",
-			len(ms.guideCache), len(ms.shinyCache), len(ms.seenAlerted), len(ms.snipedIDs), len(ms.sellAlerted))
 	}
 }

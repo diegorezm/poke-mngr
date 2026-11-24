@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"poke-mngr/internal/config"
+	"poke-mngr/internal/store"
 )
 
 func TestHuntPkMudAndPkFora(t *testing.T) {
@@ -73,9 +74,43 @@ func TestShopRestockGoldFloorAndHysteresis(t *testing.T) {
 	}
 }
 
-func TestParseImportText(t *testing.T) {
-	nick, tok, dev, err := ParseImportText(`{"nick":"Ash","token":"abc123","dispositivo":"dev-xyz"}`)
-	if err != nil || nick != "Ash" || tok != "abc123" || dev != "dev-xyz" {
-		t.Fatalf("unexpected parse result: %q %q %q err=%v", nick, tok, dev, err)
+func TestChatHubDedupeAndNormalize(t *testing.T) {
+	hub := NewChatHub()
+	frame := map[string]any{
+		"t":      "chat",
+		"id":     float64(42),
+		"canal":  "mundo",
+		"idioma": "pt",
+		"de":     "Ash",
+		"nivel":  float64(50),
+		"texto":  "Oi pessoal!",
+	}
+	hub.HandleFrame(1, "Ash", frame)
+	hub.HandleFrame(2, "Misty", frame) // duplicate from 2nd account
+	msgs := hub.Messages("mundo")
+	if len(msgs) != 1 || msgs[0].Text != "Oi pessoal!" {
+		t.Fatalf("expected 1 deduped message, got %+v", msgs)
+	}
+}
+
+func TestEffectiveThresholdAndSellPremium(t *testing.T) {
+	if got := EffectiveThreshold(store.MarketRuleSpec{MaxPrice: 10000}, 0); got != 10000 {
+		t.Fatalf("expected 10000, got %d", got)
+	}
+	if got := EffectiveThreshold(store.MarketRuleSpec{MaxPctBelow: 20}, 5000); got != 4000 {
+		t.Fatalf("expected 4000, got %d", got)
+	}
+	if got := EffectiveThreshold(store.MarketRuleSpec{MaxPrice: 4500, MaxPctBelow: 20}, 5000); got != 4000 {
+		t.Fatalf("expected 4000, got %d", got)
+	}
+	prem, ok := SellPremium(140, 100, 5, 0.30)
+	if !ok || prem < 0.39 {
+		t.Fatalf("expected sell premium ok (~0.40), got %v %v", prem, ok)
+	}
+	if _, ok := SellPremium(200, 100, 2, 0.30); ok {
+		t.Fatalf("expected reject when sold < 3")
+	}
+	if _, ok := SellPremium(5, 100, 10, 0.30); ok {
+		t.Fatalf("expected reject on spoof price")
 	}
 }
