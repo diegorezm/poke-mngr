@@ -19,12 +19,23 @@ import {
   POTION_OPTIONS,
   ProxyConfig,
   REVIVE_ICON,
+  RestockConfig,
+  RestockRule,
   ballIcon,
   defaultAccountOptions,
   potionIcon,
 } from "../lib/types";
 import { api } from "../lib/api";
 import { ItemSprite } from "./PokemonSprite";
+
+function asAccountList(list: AccountRecord[] | null | undefined): AccountRecord[] {
+  return list || [];
+}
+
+function formatAddedAccountToast(res: { account: AccountRecord; probe?: { level?: number } }): string {
+  const lvl = res.probe?.level ? ` (Lv ${res.probe.level})` : "";
+  return `Conta ${res.account.nick} adicionada${lvl}!`;
+}
 
 export function SettingsView({
   settings,
@@ -70,7 +81,7 @@ export function SettingsView({
   const reloadAccounts = async () => {
     try {
       const list = await api.listAccounts();
-      setAccounts(list || []);
+      setAccounts(asAccountList(list));
     } catch (e) {
       onToast(`Erro ao listar contas: ${String(e)}`);
     }
@@ -102,28 +113,24 @@ export function SettingsView({
       onToast(`Proxy OK! IP de saída: ${ip}`);
     } catch (e) {
       onToast(`Falha no proxy: ${String(e)}`);
-    } finally {
-      setTestingProxy(false);
     }
+    setTestingProxy(false);
   };
 
   const handleAddAccount = async () => {
+    const payload = {
+      nick,
+      token,
+      deviceId,
+      enabled: true,
+      proxy: useProxy && proxy.host ? proxy : null,
+      options: defaultAccountOptions(),
+      skipTest,
+    };
     setSavingAcc(true);
     try {
-      const res = await api.addAccount({
-        nick,
-        token,
-        deviceId,
-        enabled: true,
-        proxy: useProxy && proxy.host ? proxy : null,
-        options: defaultAccountOptions(),
-        skipTest,
-      });
-      onToast(
-        `Conta ${res.account.nick} adicionada${
-          res.probe?.level ? ` (Lv ${res.probe.level})` : ""
-        }!`
-      );
+      const res = await api.addAccount(payload);
+      onToast(formatAddedAccountToast(res));
       setShowAdd(false);
       setPasteText("");
       setNick("");
@@ -133,9 +140,42 @@ export function SettingsView({
       await reloadAccounts();
     } catch (e) {
       onToast(`Erro ao adicionar conta: ${String(e)}`);
-    } finally {
-      setSavingAcc(false);
     }
+    setSavingAcc(false);
+  };
+
+  const updateRestock = (patch: Partial<RestockConfig>) => {
+    setEditing((prev) =>
+      prev
+        ? {
+            ...prev,
+            options: {
+              ...prev.options,
+              restock: { ...prev.options.restock, ...patch },
+            },
+          }
+        : prev
+    );
+  };
+
+  const updateRestockRule = (
+    kind: "potion" | "ball" | "revive",
+    patch: Partial<RestockRule>
+  ) => {
+    setEditing((prev) =>
+      prev
+        ? {
+            ...prev,
+            options: {
+              ...prev.options,
+              restock: {
+                ...prev.options.restock,
+                [kind]: { ...prev.options.restock[kind], ...patch },
+              },
+            },
+          }
+        : prev
+    );
   };
 
   const handleSaveEdit = async () => {
@@ -474,15 +514,7 @@ export function SettingsView({
                   <input
                     type="checkbox"
                     checked={editing.options.restock.enabled}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        options: {
-                          ...editing.options,
-                          restock: { ...editing.options.restock, enabled: e.target.checked },
-                        },
-                      })
-                    }
+                    onChange={(e) => updateRestock({ enabled: e.target.checked })}
                   />
                   Recompra Automática Avançada (Histerese + Piso de Ouro)
                 </label>
@@ -491,15 +523,7 @@ export function SettingsView({
                     <input
                       type="checkbox"
                       checked={editing.options.restock.potionFirst}
-                      onChange={(e) =>
-                        setEditing({
-                          ...editing,
-                          options: {
-                            ...editing.options,
-                            restock: { ...editing.options.restock, potionFirst: e.target.checked },
-                          },
-                        })
-                      }
+                      onChange={(e) => updateRestock({ potionFirst: e.target.checked })}
                     />
                     Poção em 1º na fila
                   </label>
@@ -508,15 +532,7 @@ export function SettingsView({
                     <input
                       type="number"
                       value={editing.options.restock.goldFloor}
-                      onChange={(e) =>
-                        setEditing({
-                          ...editing,
-                          options: {
-                            ...editing.options,
-                            restock: { ...editing.options.restock, goldFloor: Number(e.target.value) },
-                          },
-                        })
-                      }
+                      onChange={(e) => updateRestock({ goldFloor: Number(e.target.value) })}
                       className="w-28 rounded bg-[#111525] border border-slate-700 px-2 py-1 text-xs font-mono text-amber-300"
                     />
                   </div>
@@ -530,36 +546,14 @@ export function SettingsView({
                     <input
                       type="checkbox"
                       checked={editing.options.restock.potion.enabled}
-                      onChange={(e) =>
-                        setEditing({
-                          ...editing,
-                          options: {
-                            ...editing.options,
-                            restock: {
-                              ...editing.options.restock,
-                              potion: { ...editing.options.restock.potion, enabled: e.target.checked },
-                            },
-                          },
-                        })
-                      }
+                      onChange={(e) => updateRestockRule("potion", { enabled: e.target.checked })}
                     />
                     <ItemSprite icon={potionIcon(editing.options.restock.potion.id || 204)} size={20} />
                     Poções
                   </label>
                   <select
                     value={editing.options.restock.potion.id}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        options: {
-                          ...editing.options,
-                          restock: {
-                            ...editing.options.restock,
-                            potion: { ...editing.options.restock.potion, id: Number(e.target.value) },
-                          },
-                        },
-                      })
-                    }
+                    onChange={(e) => updateRestockRule("potion", { id: Number(e.target.value) })}
                     className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 text-xs"
                   >
                     <option value={0}>Auto (Equipada / Melhor custo HP)</option>
@@ -575,18 +569,7 @@ export function SettingsView({
                       <input
                         type="number"
                         value={editing.options.restock.potion.below}
-                        onChange={(e) =>
-                          setEditing({
-                            ...editing,
-                            options: {
-                              ...editing.options,
-                              restock: {
-                                ...editing.options.restock,
-                                potion: { ...editing.options.restock.potion, below: Number(e.target.value) },
-                              },
-                            },
-                          })
-                        }
+                        onChange={(e) => updateRestockRule("potion", { below: Number(e.target.value) })}
                         className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
                       />
                     </div>
@@ -595,18 +578,7 @@ export function SettingsView({
                       <input
                         type="number"
                         value={editing.options.restock.potion.keep}
-                        onChange={(e) =>
-                          setEditing({
-                            ...editing,
-                            options: {
-                              ...editing.options,
-                              restock: {
-                                ...editing.options.restock,
-                                potion: { ...editing.options.restock.potion, keep: Number(e.target.value) },
-                              },
-                            },
-                          })
-                        }
+                        onChange={(e) => updateRestockRule("potion", { keep: Number(e.target.value) })}
                         className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
                       />
                     </div>
@@ -619,36 +591,14 @@ export function SettingsView({
                     <input
                       type="checkbox"
                       checked={editing.options.restock.ball.enabled}
-                      onChange={(e) =>
-                        setEditing({
-                          ...editing,
-                          options: {
-                            ...editing.options,
-                            restock: {
-                              ...editing.options.restock,
-                              ball: { ...editing.options.restock.ball, enabled: e.target.checked },
-                            },
-                          },
-                        })
-                      }
+                      onChange={(e) => updateRestockRule("ball", { enabled: e.target.checked })}
                     />
                     <ItemSprite icon={ballIcon(editing.options.restock.ball.id || 4)} size={20} />
                     Pokébolas
                   </label>
                   <select
                     value={editing.options.restock.ball.id}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        options: {
-                          ...editing.options,
-                          restock: {
-                            ...editing.options.restock,
-                            ball: { ...editing.options.restock.ball, id: Number(e.target.value) },
-                          },
-                        },
-                      })
-                    }
+                    onChange={(e) => updateRestockRule("ball", { id: Number(e.target.value) })}
                     className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 text-xs"
                   >
                     <option value={0}>Auto (Bola equipada)</option>
@@ -664,18 +614,7 @@ export function SettingsView({
                       <input
                         type="number"
                         value={editing.options.restock.ball.below}
-                        onChange={(e) =>
-                          setEditing({
-                            ...editing,
-                            options: {
-                              ...editing.options,
-                              restock: {
-                                ...editing.options.restock,
-                                ball: { ...editing.options.restock.ball, below: Number(e.target.value) },
-                              },
-                            },
-                          })
-                        }
+                        onChange={(e) => updateRestockRule("ball", { below: Number(e.target.value) })}
                         className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
                       />
                     </div>
@@ -684,18 +623,7 @@ export function SettingsView({
                       <input
                         type="number"
                         value={editing.options.restock.ball.keep}
-                        onChange={(e) =>
-                          setEditing({
-                            ...editing,
-                            options: {
-                              ...editing.options,
-                              restock: {
-                                ...editing.options.restock,
-                                ball: { ...editing.options.restock.ball, keep: Number(e.target.value) },
-                              },
-                            },
-                          })
-                        }
+                        onChange={(e) => updateRestockRule("ball", { keep: Number(e.target.value) })}
                         className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
                       />
                     </div>
@@ -708,18 +636,7 @@ export function SettingsView({
                     <input
                       type="checkbox"
                       checked={editing.options.restock.revive.enabled}
-                      onChange={(e) =>
-                        setEditing({
-                          ...editing,
-                          options: {
-                            ...editing.options,
-                            restock: {
-                              ...editing.options.restock,
-                              revive: { ...editing.options.restock.revive, enabled: e.target.checked },
-                            },
-                          },
-                        })
-                      }
+                      onChange={(e) => updateRestockRule("revive", { enabled: e.target.checked })}
                     />
                     <ItemSprite icon={REVIVE_ICON} size={20} />
                     Revives (mais barato)
@@ -733,18 +650,7 @@ export function SettingsView({
                       <input
                         type="number"
                         value={editing.options.restock.revive.below}
-                        onChange={(e) =>
-                          setEditing({
-                            ...editing,
-                            options: {
-                              ...editing.options,
-                              restock: {
-                                ...editing.options.restock,
-                                revive: { ...editing.options.restock.revive, below: Number(e.target.value) },
-                              },
-                            },
-                          })
-                        }
+                        onChange={(e) => updateRestockRule("revive", { below: Number(e.target.value) })}
                         className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
                       />
                     </div>
@@ -753,18 +659,7 @@ export function SettingsView({
                       <input
                         type="number"
                         value={editing.options.restock.revive.keep}
-                        onChange={(e) =>
-                          setEditing({
-                            ...editing,
-                            options: {
-                              ...editing.options,
-                              restock: {
-                                ...editing.options.restock,
-                                revive: { ...editing.options.restock.revive, keep: Number(e.target.value) },
-                              },
-                            },
-                          })
-                        }
+                        onChange={(e) => updateRestockRule("revive", { keep: Number(e.target.value) })}
                         className="w-full rounded bg-[#0a0d18] border border-slate-700 px-2 py-1 font-mono"
                       />
                     </div>

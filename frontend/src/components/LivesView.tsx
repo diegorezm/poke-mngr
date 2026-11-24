@@ -12,6 +12,15 @@ import {
 import { LivesAccountConfig, LivesCentralState } from "../lib/types";
 import { api } from "../lib/api";
 
+function normalizeLivesState(st: LivesCentralState): LivesCentralState {
+  return {
+    ...st,
+    channels: Array.isArray(st.channels) ? st.channels : [],
+    accounts: Array.isArray(st.accounts) ? st.accounts : [],
+    logs: Array.isArray(st.logs) ? st.logs : [],
+  };
+}
+
 export function LivesView({ onToast }: { onToast: (msg: string) => void }) {
   const [state, setState] = useState<LivesCentralState | null>(null);
   const [selectedAccId, setSelectedAccId] = useState<number>(0);
@@ -21,14 +30,7 @@ export function LivesView({ onToast }: { onToast: (msg: string) => void }) {
   const load = () => {
     api
       .getLivesState()
-      .then((st) => {
-        setState({
-          ...st,
-          channels: Array.isArray(st.channels) ? st.channels : [],
-          accounts: Array.isArray(st.accounts) ? st.accounts : [],
-          logs: Array.isArray(st.logs) ? st.logs : [],
-        });
-      })
+      .then((st) => setState(normalizeLivesState(st)))
       .catch(() => {});
   };
 
@@ -51,16 +53,12 @@ export function LivesView({ onToast }: { onToast: (msg: string) => void }) {
     setRefreshing(true);
     try {
       const st = await api.refreshLivesStatus();
-      setState({
-        ...st,
-        channels: Array.isArray(st.channels) ? st.channels : [],
-        accounts: Array.isArray(st.accounts) ? st.accounts : [],
-        logs: Array.isArray(st.logs) ? st.logs : [],
-      });
+      setState(normalizeLivesState(st));
       onToast("Status dos canais atualizado!");
-    } finally {
-      setRefreshing(false);
+    } catch (e) {
+      onToast(`Erro ao atualizar canais: ${String(e)}`);
     }
+    setRefreshing(false);
   };
 
   const handleSaveCfg = async () => {
@@ -85,9 +83,10 @@ export function LivesView({ onToast }: { onToast: (msg: string) => void }) {
       onToast("Nenhum canal ao vivo atribuído a esta vaga.");
       return;
     }
+    const modeLabel = hidden ? "em segundo plano (mudo)" : "visível";
     try {
       await api.openLivePlayer(accId, site, slot, channel, hidden);
-      onToast(`Player ${site}/${channel} iniciado ${hidden ? "em segundo plano (mudo)" : "visível"}`);
+      onToast(`Player ${site}/${channel} iniciado ${modeLabel}`);
       load();
     } catch (e) {
       onToast(String(e));

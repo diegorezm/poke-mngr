@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Sparkles,
   Search,
@@ -78,17 +78,15 @@ export function InventoryView({
     return () => clearInterval(id);
   }, [accountFilter, sortBy]);
 
-  const filteredPks = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return pokemons.filter((p) => {
-      if (onlyShiny && !p.shiny) return false;
-      if (onlyTeam && !p.noTime) return false;
-      if (q && !p.nome.toLowerCase().includes(q) && !p.apelido.toLowerCase().includes(q)) {
-        return false;
-      }
-      return true;
-    });
-  }, [pokemons, search, onlyShiny, onlyTeam]);
+  const q = search.trim().toLowerCase();
+  const filteredPks = pokemons.filter((p) => {
+    if (onlyShiny && !p.shiny) return false;
+    if (onlyTeam && !p.noTime) return false;
+    if (q && !p.nome.toLowerCase().includes(q) && !p.apelido.toLowerCase().includes(q)) {
+      return false;
+    }
+    return true;
+  });
 
   const handleSellDepot = async () => {
     if (accountFilter === 0) {
@@ -103,18 +101,18 @@ export function InventoryView({
     ) {
       return;
     }
+    const nick = acc?.nick;
     setSelling(true);
     try {
       const res = await api.sellDepot(accountFilter);
       onToast(
-        `${acc?.nick}: vendidos ${res.qty} Pokémon por ${fmtCompact(res.gained)} Gold!`
+        `${nick}: vendidos ${res.qty} Pokémon por ${fmtCompact(res.gained)} Gold!`
       );
       load();
     } catch (e) {
       onToast(`Erro na venda do Depot: ${String(e)}`);
-    } finally {
-      setSelling(false);
     }
+    setSelling(false);
   };
 
   return (

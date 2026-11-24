@@ -27,6 +27,8 @@ export function DeckView({
   const [hiddenIds, setHiddenIds] = useState<Record<number, boolean>>({});
   const [urls, setUrls] = useState<Record<number, string>>({});
 
+  const accountIdsKey = accounts.map((a) => a.id).join(",");
+
   useEffect(() => {
     let alive = true;
     accounts.forEach((acc) => {
@@ -41,7 +43,7 @@ export function DeckView({
     return () => {
       alive = false;
     };
-  }, [accounts.map((a) => a.id).join(",")]);
+  }, [accountIdsKey]);
 
   const activeAccounts = accounts.filter((a) => !hiddenIds[a.id]);
   const visibleAccounts =

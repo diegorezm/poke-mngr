@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { ActivePokemonSheet } from "./types";
 
@@ -101,7 +101,7 @@ export function useBestHunts(accountId: number, trigger: string, enabled: boolea
   const [loading, setLoading] = useState(false);
   const last = useRef({ acc: 0, at: 0 });
   const [nonce, setNonce] = useState(0);
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  const reload = () => setNonce((n) => n + 1);
 
   useEffect(() => {
     if (!accountId || !enabled) return;
@@ -140,9 +140,8 @@ export function useBestHunts(accountId: number, trigger: string, enabled: boolea
         }
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (alive) setLoading(false);
       }
+      if (alive) setLoading(false);
     }, wait);
 
     last.current.acc = accountId;

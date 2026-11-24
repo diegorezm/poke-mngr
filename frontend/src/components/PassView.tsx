@@ -4,6 +4,33 @@ import { AccountTelemetry, fmtDuration } from "../lib/types";
 import { api } from "../lib/api";
 import { PASS_TRACK, computePassState, prizeView } from "../lib/gameData";
 
+function ResetCountdown({
+  viradaEm,
+  serverOffsetMs,
+}: {
+  viradaEm: number;
+  serverOffsetMs: number;
+}) {
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const untilResetSec = Math.max(
+    0,
+    Math.floor((viradaEm - (now + serverOffsetMs)) / 1000)
+  );
+
+  return (
+    <span className="text-slate-400 inline-flex items-center gap-1.5">
+      <Clock className="w-4 h-4 text-sky-400" />
+      Vira em <b className="font-mono text-white">{fmtDuration(untilResetSec)}</b>
+    </span>
+  );
+}
+
 export function PassView({
   accounts,
   serverTimeMs,
@@ -14,13 +41,7 @@ export function PassView({
   onToast: (msg: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<number>(0);
-  const [now, setNow] = useState<number>(serverTimeMs || Date.now());
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const acc = accounts.find((a) => a.id === selectedId) || accounts[0];
   const claimableCount = accounts.filter((a) => a.state === "ONLINE" && a.pass.canClaim).length;
@@ -32,9 +53,8 @@ export function PassView({
       onToast(`${nick}: passe diário resgatado!`);
     } catch (e) {
       onToast(`Erro: ${String(e)}`);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   const handleClaimAll = async () => {
@@ -44,9 +64,8 @@ export function PassView({
       onToast(`${n} conta(s) resgataram o passe diário!`);
     } catch (e) {
       onToast(`Erro: ${String(e)}`);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   if (!acc) {
@@ -57,8 +76,7 @@ export function PassView({
     );
   }
 
-  const st = computePassState(acc.pass.raw, now + (acc.serverOffsetMs || 0));
-  const untilResetSec = Math.max(0, Math.floor((st.viradaEm - (now + (acc.serverOffsetMs || 0))) / 1000));
+  const st = computePassState(acc.pass.raw, serverTimeMs + (acc.serverOffsetMs || 0));
 
   return (
     <div className="space-y-4 max-w-5xl">
@@ -84,10 +102,10 @@ export function PassView({
         </div>
 
         <div className="flex items-center gap-3 text-xs">
-          <span className="text-slate-400 inline-flex items-center gap-1.5">
-            <Clock className="w-4 h-4 text-sky-400" />
-            Vira em <b className="font-mono text-white">{fmtDuration(untilResetSec)}</b>
-          </span>
+          <ResetCountdown
+            viradaEm={st.viradaEm}
+            serverOffsetMs={acc.serverOffsetMs || 0}
+          />
           {claimableCount > 0 && (
             <button
               disabled={busy}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -55,11 +55,8 @@ export function BestHuntCard({
 }) {
   const [more, setMore] = useState(false);
 
-  const bySlug = useMemo(() => new Map(hunts.map((h) => [h.slug, h])), [hunts]);
-  const ranked = useMemo(
-    () => rankLines(best?.lines, order).filter((l) => bySlug.has(l.slug)),
-    [best, order, bySlug]
-  );
+  const bySlug = new Map(hunts.map((h) => [h.slug, h]));
+  const ranked = rankLines(best?.lines, order).filter((l) => bySlug.has(l.slug));
   const shown = ranked.slice(0, more ? MAX : SHOWN);
 
   const sheet = best?.sheet;

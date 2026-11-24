@@ -57,11 +57,15 @@ export function ChatView({
           return { ...prev, [ch]: [...cur.slice(-199), msg] };
         });
       } else if (ev.type === "history" && ev.canal && ev.msgs) {
-        setMessages((prev) => ({ ...prev, [ev.canal!]: ev.msgs! }));
+        const ch = ev.canal;
+        const msgs = ev.msgs;
+        setMessages((prev) => ({ ...prev, [ch]: msgs }));
       } else if (ev.type === "del" && ev.canal && ev.delId) {
+        const ch = ev.canal;
+        const delId = ev.delId;
         setMessages((prev) => ({
           ...prev,
-          [ev.canal!]: (prev[ev.canal!] || []).filter((m) => String(m.id) !== ev.delId),
+          [ch]: (prev[ch] || []).filter((m) => String(m.id) !== delId),
         }));
       } else if (ev.type === "notice" && ev.notice) {
         onToast(ev.notice);
@@ -87,9 +91,8 @@ export function ChatView({
       setText("");
     } catch (err) {
       onToast(String(err));
-    } finally {
-      setSending(false);
     }
+    setSending(false);
   };
 
   return (

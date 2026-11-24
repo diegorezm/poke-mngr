@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   RefreshCw,
   Star,
@@ -29,6 +29,14 @@ interface ItemMetaEntry {
   icon: string;
   category?: string;
   rare?: boolean;
+}
+
+function isSniperEnabled(ov: Record<string, unknown> | null): boolean {
+  return Boolean(ov?.sniperEnabled);
+}
+
+function extractRows(res: Record<string, unknown>): Record<string, unknown>[] {
+  return (res.linhas as Record<string, unknown>[]) || [];
 }
 
 export function MarketView({
@@ -87,12 +95,11 @@ export function MarketView({
     try {
       const ov = await api.getMarketOverview();
       setOverview(ov);
-      setSniperEnabled(Boolean(ov?.sniperEnabled));
+      setSniperEnabled(isSniperEnabled(ov));
     } catch (e) {
       onToast(`Mercado: ${String(e)}`);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   const loadRules = async () => {
@@ -144,47 +151,45 @@ export function MarketView({
 
   const itemsMeta = (overview?.itemsMeta as Record<string, ItemMetaEntry>) || {};
 
-  const itemRows = useMemo(() => {
-    const resumo = (overview?.resumo as Record<string, Record<string, number>>) || {};
-    const medias = (overview?.medias as Record<string, Record<string, { media?: number }>>) || {};
-    const favs = new Set<number>((overview?.favs as number[]) || []);
-    const q = search.trim().toLowerCase();
+  const resumo = (overview?.resumo as Record<string, Record<string, number>>) || {};
+  const medias = (overview?.medias as Record<string, Record<string, { media?: number }>>) || {};
+  const favs = new Set<number>((overview?.favs as number[]) || []);
+  const q = search.trim().toLowerCase();
 
-    return Object.entries(resumo)
-      .map(([idStr, r]) => {
-        const id = Number(idStr);
-        const min = moeda === "orb" ? r.minOrb || 0 : r.minGold || 0;
-        const avg = medias[idStr]?.[moeda]?.media || 0;
-        const pctDiff = avg > 0 && min > 0 ? ((min - avg) / avg) * 100 : 0;
-        const meta = itemsMeta[idStr];
-        const name = meta?.name || `Item #${id}`;
-        const icon = meta?.icon || "";
-        return {
-          id,
-          name,
-          icon,
-          rare: Boolean(meta?.rare),
-          ads: r.anuncios || 0,
-          units: r.unidades || 0,
-          min,
-          avg,
-          pctDiff,
-          fav: favs.has(id),
-        };
-      })
-      .filter((row) => {
-        if (row.min <= 0) return false;
-        if (q && !row.name.toLowerCase().includes(q) && !String(row.id).includes(q)) return false;
-        return true;
-      })
-      .sort((a, b) => Number(b.fav) - Number(a.fav) || b.units - a.units);
-  }, [overview, moeda, search]);
+  const itemRows = Object.entries(resumo)
+    .map(([idStr, r]) => {
+      const id = Number(idStr);
+      const min = moeda === "orb" ? r.minOrb || 0 : r.minGold || 0;
+      const avg = medias[idStr]?.[moeda]?.media || 0;
+      const pctDiff = avg > 0 && min > 0 ? ((min - avg) / avg) * 100 : 0;
+      const meta = itemsMeta[idStr];
+      const name = meta?.name || `Item #${id}`;
+      const icon = meta?.icon || "";
+      return {
+        id,
+        name,
+        icon,
+        rare: Boolean(meta?.rare),
+        ads: r.anuncios || 0,
+        units: r.unidades || 0,
+        min,
+        avg,
+        pctDiff,
+        fav: favs.has(id),
+      };
+    })
+    .filter((row) => {
+      if (row.min <= 0) return false;
+      if (q && !row.name.toLowerCase().includes(q) && !String(row.id).includes(q)) return false;
+      return true;
+    })
+    .sort((a, b) => Number(b.fav) - Number(a.fav) || b.units - a.units);
 
   const handleOpenItem = async (itemId: number) => {
     if (!activeBuyer) return;
     try {
       const res = await api.getMarketItemListings(itemId, moeda, activeBuyer.id);
-      setOpenItem({ id: itemId, listings: (res.linhas as Record<string, unknown>[]) || [] });
+      setOpenItem({ id: itemId, listings: extractRows(res) });
     } catch (e) {
       onToast(`Erro: ${String(e)}`);
     }
@@ -208,25 +213,26 @@ export function MarketView({
   };
 
   const handleAddRule = async () => {
+    const rule: MarketRule = {
+      id: 0,
+      kind: newRuleKind,
+      enabled: true,
+      spec: {
+        target: "item",
+        itemId: newItemId,
+        itemName: newItemName || `Item #${newItemId}`,
+        moeda,
+        maxPrice: newMaxPrice,
+        dailyBudget: newRuleKind === "snipe" ? newBudget : 0,
+        accountIds: activeBuyer ? [activeBuyer.id] : [],
+      },
+      spent: 0,
+      spentDay: "",
+      lastFire: 0,
+      createdAt: 0,
+    };
     try {
-      await api.saveMarketRule({
-        id: 0,
-        kind: newRuleKind,
-        enabled: true,
-        spec: {
-          target: "item",
-          itemId: newItemId,
-          itemName: newItemName || `Item #${newItemId}`,
-          moeda,
-          maxPrice: newMaxPrice,
-          dailyBudget: newRuleKind === "snipe" ? newBudget : 0,
-          accountIds: activeBuyer ? [activeBuyer.id] : [],
-        },
-        spent: 0,
-        spentDay: "",
-        lastFire: 0,
-        createdAt: 0,
-      });
+      await api.saveMarketRule(rule);
       onToast("Regra criada!");
       loadRules();
     } catch (e) {

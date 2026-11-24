@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Lock, Search, Play, Clock, X, Shield, Flame } from "lucide-react";
 import { AccountTelemetry, HuntInfo, HuntsCatalog, fmtCompact } from "../lib/types";
 import { api } from "../lib/api";
@@ -46,20 +46,20 @@ export function MapaView({
     activeAcc?.state === "ONLINE"
   );
 
-  const calcBySlug = useMemo(() => {
-    const map = new Map<string, { xpH: number; ouroH: number; rank: number | null; umHit: boolean }>();
-    const ranked = rankLines(advisor.data?.lines, order);
-    const rankPos = new Map(ranked.map((l, i) => [l.slug, i + 1]));
-    for (const l of advisor.data?.lines || []) {
-      map.set(l.slug, {
-        xpH: l.xpPokemonH,
-        ouroH: l.ouroH,
-        rank: rankPos.get(l.slug) ?? null,
-        umHit: l.umHit,
-      });
-    }
-    return map;
-  }, [advisor.data, order]);
+  const calcBySlug = new Map<
+    string,
+    { xpH: number; ouroH: number; rank: number | null; umHit: boolean }
+  >();
+  const rankedLines = rankLines(advisor.data?.lines, order);
+  const rankPos = new Map(rankedLines.map((l, i) => [l.slug, i + 1]));
+  for (const l of advisor.data?.lines || []) {
+    calcBySlug.set(l.slug, {
+      xpH: l.xpPokemonH,
+      ouroH: l.ouroH,
+      rank: rankPos.get(l.slug) ?? null,
+      umHit: l.umHit,
+    });
+  }
 
   const refresh = () => {
     if (!activeAccId) return;
@@ -79,64 +79,60 @@ export function MapaView({
     refresh();
   }, [activeAccId, activeAcc?.hunt.slug, activeAcc?.hunt.pendingSlug, activeAcc?.hunt.outlandTier, activeAcc?.state]);
 
-  const availableRegions = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const h of catalog?.hunts || []) {
-      counts[h.regiao] = (counts[h.regiao] || 0) + 1;
-    }
-    return REGION_ORDER.filter((r) => counts[r.id] > 0).map((r) => ({
-      ...r,
-      count: counts[r.id],
-    }));
-  }, [catalog]);
+  const regionCounts: Record<string, number> = {};
+  for (const h of catalog?.hunts || []) {
+    regionCounts[h.regiao] = (regionCounts[h.regiao] || 0) + 1;
+  }
+  const availableRegions = REGION_ORDER.filter((r) => regionCounts[r.id] > 0).map((r) => ({
+    ...r,
+    count: regionCounts[r.id],
+  }));
 
   useEffect(() => {
     if (availableRegions.length > 0 && !availableRegions.some((r) => r.id === region)) {
       setRegion(availableRegions[0].id);
     }
-  }, [availableRegions]);
+  }, [availableRegions, region]);
 
-  const filteredHunts = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (catalog?.hunts || []).filter((h) => {
-      if (h.regiao !== region) return false;
-      if (q) {
-        const matchName =
-          h.nome.toLowerCase().includes(q) ||
-          h.slug.toLowerCase().includes(q) ||
-          (h.especies || []).some((e) => e.nome.toLowerCase().includes(q));
-        if (!matchName) return false;
+  const q = query.trim().toLowerCase();
+  const filteredHunts = (catalog?.hunts || []).filter((h) => {
+    if (h.regiao !== region) return false;
+    if (q) {
+      const matchName =
+        h.nome.toLowerCase().includes(q) ||
+        h.slug.toLowerCase().includes(q) ||
+        (h.especies || []).some((e) => e.nome.toLowerCase().includes(q));
+      if (!matchName) return false;
+    }
+    if (typeFilter) {
+      const tipos = h.tipos || [];
+      if (typeMode === "has" && !tipos.includes(typeFilter)) return false;
+      if (typeMode === "weak") {
+        const isWeak = (h.especies || []).some((e) => effectiveness(typeFilter, e.tipos || []) > 1);
+        if (!isWeak) return false;
       }
-      if (typeFilter) {
-        const tipos = h.tipos || [];
-        if (typeMode === "has" && !tipos.includes(typeFilter)) return false;
-        if (typeMode === "weak") {
-          const isWeak = (h.especies || []).some((e) => effectiveness(typeFilter, e.tipos || []) > 1);
-          if (!isWeak) return false;
-        }
-        if (typeMode === "resist") {
-          const isRes = (h.especies || []).some((e) => effectiveness(typeFilter, e.tipos || []) < 1);
-          if (!isRes) return false;
-        }
+      if (typeMode === "resist") {
+        const isRes = (h.especies || []).some((e) => effectiveness(typeFilter, e.tipos || []) < 1);
+        if (!isRes) return false;
       }
-      return true;
-    });
-  }, [catalog, region, query, typeFilter, typeMode]);
+    }
+    return true;
+  });
 
-  const inspected: HuntInfo | undefined = useMemo(() => {
-    const slug = inspectSlug || catalog?.activeSlug || filteredHunts[0]?.slug;
-    return (catalog?.hunts || []).find((h) => h.slug === slug);
-  }, [catalog, inspectSlug, filteredHunts]);
+  const inspectedSlug = inspectSlug || catalog?.activeSlug || filteredHunts[0]?.slug;
+  const inspected: HuntInfo | undefined = (catalog?.hunts || []).find(
+    (h) => h.slug === inspectedSlug
+  );
 
   const handleSelectHunt = async (h: HuntInfo) => {
     if (!activeAccId) return;
+    const msg =
+      catalog && catalog.combatLockMs > 0
+        ? `${activeAcc?.nick}: ${h.nome} enfileirada após trava de combate`
+        : `${activeAcc?.nick}: indo caçar em ${h.nome}`;
     try {
       await api.selectHunt(activeAccId, h.slug);
-      onToast(
-        catalog && catalog.combatLockMs > 0
-          ? `${activeAcc?.nick}: ${h.nome} enfileirada após trava de combate`
-          : `${activeAcc?.nick}: indo caçar em ${h.nome}`
-      );
+      onToast(msg);
       refresh();
     } catch (e) {
       onToast(`Erro ao trocar hunt: ${String(e)}`);
@@ -145,9 +141,10 @@ export function MapaView({
 
   const handleTier = async (tier: number) => {
     if (!activeAccId) return;
+    const nick = activeAcc?.nick;
     try {
       await api.selectOutlandTier(activeAccId, tier);
-      onToast(`${activeAcc?.nick}: Outland Tier ${tier} selecionado`);
+      onToast(`${nick}: Outland Tier ${tier} selecionado`);
       refresh();
     } catch (e) {
       onToast(`Erro no tier: ${String(e)}`);

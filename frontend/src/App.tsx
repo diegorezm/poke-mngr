@@ -300,6 +300,7 @@ export function App() {
                       key={acc.id}
                       acc={acc}
                       bridgePort={snap.bridgePort}
+                      serverTimeMs={snap.serverTimeMs}
                       cardStyle={settings.cardStyle}
                       onToast={showToast}
                       onDragStart={() => setDragId(acc.id)}

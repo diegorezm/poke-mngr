@@ -65,6 +65,7 @@ const STATE_META: Record<
 export function AccountCard({
   acc,
   bridgePort,
+  serverTimeMs,
   cardStyle,
   onToast,
   onDragStart,
@@ -73,6 +74,7 @@ export function AccountCard({
 }: {
   acc: AccountTelemetry;
   bridgePort: number;
+  serverTimeMs: number;
   cardStyle: CardStyle;
   onToast: (msg: string) => void;
   onDragStart: () => void;
@@ -112,9 +114,8 @@ export function AccountCard({
       onToast(`${acc.nick}: equipado com sucesso`);
     } catch (e) {
       onToast(`Erro ao equipar: ${String(e)}`);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   const handleClaimPass = async () => {
@@ -146,7 +147,7 @@ export function AccountCard({
 
   const sessionElapsed =
     acc.session.startedAt > 0
-      ? Math.max(0, Math.floor(Date.now() / 1000) - acc.session.startedAt)
+      ? Math.max(0, Math.floor(serverTimeMs / 1000) - acc.session.startedAt)
       : 0;
 
   return (

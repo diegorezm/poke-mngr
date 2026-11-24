@@ -13,6 +13,13 @@ const BOARD_ROWS = [
   { row: 4, start: 26, count: 4 },
 ];
 
+function findFreeHouse(houses: Record<string, number>): number {
+  const used = new Set(Object.values(houses));
+  let house = 0;
+  while (used.has(house) && house < 29) house++;
+  return house;
+}
+
 export function PvpView({
   bridgePort,
   onToast,
@@ -72,9 +79,11 @@ export function PvpView({
   }, [sub, current?.accountId, ladderPage]);
 
   const handleToggleAuto = async (v: PvpAccountView) => {
+    const nextAuto = !v.auto;
+    const label = nextAuto ? "LIGADA" : "DESLIGADA";
     try {
-      await api.setPvpAuto(v.accountId, !v.auto);
-      onToast(`${v.nick}: Auto-Fila PvP ${!v.auto ? "LIGADA" : "DESLIGADA"}`);
+      await api.setPvpAuto(v.accountId, nextAuto);
+      onToast(`${v.nick}: Auto-Fila PvP ${label}`);
       load();
     } catch (e) {
       onToast(String(e));
@@ -82,9 +91,10 @@ export function PvpView({
   };
 
   const handleQueue = async (v: PvpAccountView, enter: boolean) => {
+    const actionLabel = enter ? "entrou na fila PvP" : "saiu da fila PvP";
     try {
       await api.pvpQueueAction(v.accountId, enter);
-      onToast(`${v.nick}: ${enter ? "entrou na fila PvP" : "saiu da fila PvP"}`);
+      onToast(`${v.nick}: ${actionLabel}`);
       load();
     } catch (e) {
       onToast(String(e));
@@ -105,11 +115,10 @@ export function PvpView({
       onToast("Máximo de 5 Pokémon no time PvP.");
       return;
     }
-    const used = new Set(Object.values(draftHouses));
-    let freeHouse = 0;
-    while (used.has(freeHouse) && freeHouse < 29) freeHouse++;
+    const freeHouse = findFreeHouse(draftHouses);
+    const key = String(pkId);
     setDraftTeam((t) => [...t, pkId]);
-    setDraftHouses((h) => ({ ...h, [String(pkId)]: freeHouse }));
+    setDraftHouses((h) => ({ ...h, [key]: freeHouse }));
   };
 
   const placeAtHouse = (house: number) => {
@@ -137,6 +146,14 @@ export function PvpView({
   };
 
   const rosterById = new Map(roster.map((p) => [p.id, p]));
+  const teamSet = new Set(draftTeam);
+  const houseToPk = new Map<number, PokemonDetail>();
+  for (const [idStr, house] of Object.entries(draftHouses)) {
+    const id = Number(idStr);
+    if (!teamSet.has(id)) continue;
+    const pk = rosterById.get(id);
+    if (pk) houseToPk.set(house, pk);
+  }
 
   return (
     <div className="space-y-4">
@@ -291,10 +308,7 @@ export function PvpView({
                 <div key={r.row} className="flex justify-center gap-1.5">
                   {Array.from({ length: r.count }, (_, idx) => {
                     const house = r.start + idx;
-                    const occupantId = Object.entries(draftHouses).find(
-                      ([id, h]) => h === house && draftTeam.includes(Number(id))
-                    )?.[0];
-                    const occ = occupantId ? rosterById.get(Number(occupantId)) : undefined;
+                    const occ = houseToPk.get(house);
                     return (
                       <button
                         key={house}
