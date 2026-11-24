@@ -19,30 +19,25 @@ import {
   fmtCompact,
 } from "../lib/types";
 import { api } from "../lib/api";
+import { ItemSprite, PokemonSprite } from "./PokemonSprite";
 
 type MarketSubTab = "prices" | "vitrine" | "tape" | "stats" | "rules" | "mine";
 
-const KNOWN_ITEM_NAMES: Record<number, string> = {
-  200: "Small Potion",
-  201: "Great Potion",
-  202: "Ultra Potion",
-  203: "Hyper Potion",
-  204: "Ultimate Potion",
-  205: "Revive",
-  206: "Max Revive",
-  70000: "Bronze Boss Token",
-  70010: "Escape Rope",
-  70011: "Fragmento de Chave",
-  70012: "Fragmento de Shiny Stone",
-  70013: "Fragmento de Bicicleta",
-  70070: "Golden Potion",
-};
+interface ItemMetaEntry {
+  id: number;
+  name: string;
+  icon: string;
+  category?: string;
+  rare?: boolean;
+}
 
 export function MarketView({
   accounts,
+  bridgePort,
   onToast,
 }: {
   accounts: AccountTelemetry[];
+  bridgePort: number;
   onToast: (msg: string) => void;
 }) {
   const [sub, setSub] = useState<MarketSubTab>("prices");
@@ -147,6 +142,8 @@ export function MarketView({
     }
   }, [sub, moeda, tapeMode, guideDays, activeBuyer?.id]);
 
+  const itemsMeta = (overview?.itemsMeta as Record<string, ItemMetaEntry>) || {};
+
   const itemRows = useMemo(() => {
     const resumo = (overview?.resumo as Record<string, Record<string, number>>) || {};
     const medias = (overview?.medias as Record<string, Record<string, { media?: number }>>) || {};
@@ -159,10 +156,14 @@ export function MarketView({
         const min = moeda === "orb" ? r.minOrb || 0 : r.minGold || 0;
         const avg = medias[idStr]?.[moeda]?.media || 0;
         const pctDiff = avg > 0 && min > 0 ? ((min - avg) / avg) * 100 : 0;
-        const name = KNOWN_ITEM_NAMES[id] || `Item #${id}`;
+        const meta = itemsMeta[idStr];
+        const name = meta?.name || `Item #${id}`;
+        const icon = meta?.icon || "";
         return {
           id,
           name,
+          icon,
+          rare: Boolean(meta?.rare),
           ads: r.anuncios || 0,
           units: r.unidades || 0,
           min,
@@ -331,13 +332,14 @@ export function MarketView({
               <tbody className="divide-y divide-slate-800/70">
                 {itemRows.slice(0, 80).map((row) => (
                   <tr key={row.id} className="hover:bg-slate-800/30">
-                    <td className="px-3 py-2.5 flex items-center gap-2">
+                    <td className="px-3 py-2 flex items-center gap-2.5">
                       <button
                         onClick={() => api.toggleMarketFav(row.id).then(loadOverview)}
                         className={row.fav ? "text-amber-400" : "text-slate-600 hover:text-slate-400"}
                       >
                         <Star className="w-3.5 h-3.5" />
                       </button>
+                      <ItemSprite icon={row.icon} size={26} alt={row.name} />
                       <span className="font-medium text-white">{row.name}</span>
                       <span className="text-[10px] text-slate-500 font-mono">#{row.id}</span>
                       {row.pctDiff <= -10 && (
@@ -405,30 +407,46 @@ export function MarketView({
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {vitrineRows.map((ad, idx) => (
-              <div
-                key={String(ad.id || idx)}
-                className="rounded-xl bg-[#111525] border border-slate-800 p-3 flex items-center justify-between gap-2 text-xs"
-              >
-                <div>
-                  <div className="font-semibold text-white">
-                    {String(ad.nome || ad.especie || "Pokémon")} {ad.shiny ? "✨" : ""}
-                  </div>
-                  <div className="text-slate-400">
-                    Lv {Number(ad.level || 0)} · Vendedor: {String(ad.vendedor || "?")}
-                  </div>
-                  <div className="font-mono text-amber-300 font-bold mt-1">
-                    {fmtCompact(Number(ad.preco || 0))} {moeda}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleBuy(ad)}
-                  className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/30 inline-flex items-center gap-1"
+            {vitrineRows.map((ad, idx) => {
+              const pk = (ad.pokemon as Record<string, unknown>) || ad;
+              const look = Number(
+                (pk.shiny && pk.lookShiny ? pk.lookShiny : pk.looktype) || ad.looktype || 0
+              );
+              return (
+                <div
+                  key={String(ad.id || idx)}
+                  className="rounded-xl bg-[#111525] border border-slate-800 p-3 flex items-center justify-between gap-2 text-xs"
                 >
-                  <ShoppingCart className="w-3.5 h-3.5" /> Comprar
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <PokemonSprite
+                      looktype={look}
+                      bridgePort={bridgePort}
+                      size={44}
+                      shiny={Boolean(pk.shiny || ad.shiny)}
+                      className="rounded-lg bg-[#090c18] border border-slate-800"
+                    />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-white truncate">
+                        {String(ad.nome || pk.nome || pk.especie || "Pokémon")}{" "}
+                        {pk.shiny || ad.shiny ? "✨" : ""}
+                      </div>
+                      <div className="text-slate-400 truncate">
+                        Lv {Number(pk.level || ad.level || 0)} · {String(ad.vendedor || "?")}
+                      </div>
+                      <div className="font-mono text-amber-300 font-bold mt-0.5">
+                        {fmtCompact(Number(ad.preco || 0))} {moeda}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleBuy(ad)}
+                    className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/30 inline-flex items-center gap-1 shrink-0"
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5" /> Comprar
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -752,8 +770,9 @@ export function MarketView({
             className="w-full max-w-lg rounded-2xl bg-[#111525] border border-slate-700 p-4 space-y-3"
           >
             <div className="flex justify-between items-center">
-              <h3 className="font-semibold text-white text-sm">
-                Anúncios — {KNOWN_ITEM_NAMES[openItem.id] || `Item #${openItem.id}`} ({moeda})
+              <h3 className="font-semibold text-white text-sm flex items-center gap-2">
+                <ItemSprite icon={itemsMeta[String(openItem.id)]?.icon} size={24} />
+                Anúncios — {itemsMeta[String(openItem.id)]?.name || `Item #${openItem.id}`} ({moeda})
               </h3>
               <button
                 onClick={() => setOpenItem(null)}

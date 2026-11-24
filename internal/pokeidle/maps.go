@@ -178,7 +178,7 @@ type HuntsCatalog struct {
 	Hunts        []HuntInfo    `json:"hunts"`
 }
 
-func BuildHuntInfoList(rawHunts []any) []HuntInfo {
+func BuildHuntInfoList(rawHunts []any, creatures *CreatureCatalog) []HuntInfo {
 	out := make([]HuntInfo, 0, len(rawHunts))
 	for _, r := range rawHunts {
 		h := asMap(r)
@@ -191,6 +191,7 @@ func BuildHuntInfoList(rawHunts []any) []HuntInfo {
 		}
 		reg := RegionOfHunt(h)
 		typeSet := map[string]bool{}
+		dropSet := map[string]bool{}
 		species := []HuntSpeciesInfo{}
 		bestPts := -1
 		mainLook := 0
@@ -199,6 +200,12 @@ func BuildHuntInfoList(rawHunts []any) []HuntInfo {
 			if em == nil {
 				continue
 			}
+			pid := asInt(em["pokeId"])
+			cm, hasCM := creatures.Get(pid)
+			if !hasCM {
+				cm, hasCM = creatures.ByName(asString(em["nome"]))
+			}
+
 			tipos := []string{}
 			for _, tr := range asSlice(em["tipos"]) {
 				if ts := strings.ToUpper(asString(tr)); ts != "" {
@@ -214,15 +221,34 @@ func BuildHuntInfoList(rawHunts []any) []HuntInfo {
 					typeSet[t2] = true
 				}
 			}
+			if len(tipos) == 0 && hasCM {
+				for _, t := range cm.Types {
+					tipos = append(tipos, t)
+					typeSet[t] = true
+				}
+			}
+			if hasCM {
+				for _, ln := range cm.Loot {
+					dropSet[ln] = true
+				}
+			}
+
 			pts := asInt(em["pontos"])
 			lt := asInt(em["looktype"])
-			if pts > bestPts && lt > 0 {
+			if lt <= 1 && hasCM && cm.Looktype > 1 {
+				lt = cm.Looktype
+			}
+			if pts > bestPts && lt > 1 {
 				bestPts = pts
 				mainLook = lt
 			}
+			spName := asString(em["nome"])
+			if spName == "" && hasCM {
+				spName = cm.Name
+			}
 			species = append(species, HuntSpeciesInfo{
-				PokeID:   asInt(em["pokeId"]),
-				Name:     asString(em["nome"]),
+				PokeID:   pid,
+				Name:     spName,
 				Looktype: lt,
 				Types:    tipos,
 				Points:   pts,
@@ -230,7 +256,7 @@ func BuildHuntInfoList(rawHunts []any) []HuntInfo {
 				MaxLevel: asInt(em["nivelMax"]),
 			})
 		}
-		if mainLook == 0 {
+		if mainLook <= 1 {
 			mainLook = asInt(h["looktype"])
 		}
 		for _, tr := range asSlice(h["tipos"]) {
@@ -244,16 +270,20 @@ func BuildHuntInfoList(rawHunts []any) []HuntInfo {
 		}
 		sort.Strings(tipos)
 
-		drops := []string{}
 		for _, dr := range asSlice(h["drops"]) {
 			if dm := asMap(dr); dm != nil {
 				if n := asString(dm["nome"]); n != "" {
-					drops = append(drops, n)
+					dropSet[n] = true
 				}
 			} else if ds := asString(dr); ds != "" {
-				drops = append(drops, ds)
+				dropSet[ds] = true
 			}
 		}
+		drops := make([]string, 0, len(dropSet))
+		for d := range dropSet {
+			drops = append(drops, d)
+		}
+		sort.Strings(drops)
 
 		reqLv := asInt(h["nivelNecessario"])
 		if reqLv == 0 {

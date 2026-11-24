@@ -467,9 +467,29 @@ func (ms *MarketService) Overview(ctx context.Context) (map[string]any, error) {
 	if medias != nil && asMap(medias["medias"]) != nil {
 		mediasMap = asMap(medias["medias"])
 	}
+	ms.mgr.catalog.EnsureLoaded(ctx)
+	itemsMeta := ms.mgr.catalog.AllDisplay()
+	conn.mu.RLock()
+	for id, srv := range conn.itensNossos {
+		key := fmt.Sprintf("%d", id)
+		cur := itemsMeta[key]
+		if cur.ID == 0 {
+			cur.ID = id
+		}
+		if n := asString(srv["nome"]); n != "" && cur.Name == "" {
+			cur.Name = formatItemDisplayName(n)
+		}
+		if ic := asString(srv["icone"]); ic != "" && cur.Icon == "" {
+			cur.Icon = fullAssetURL(ic)
+		}
+		itemsMeta[key] = cur
+	}
+	conn.mu.RUnlock()
+
 	return map[string]any{
 		"resumo":        resumo,
 		"medias":        mediasMap,
+		"itemsMeta":     itemsMeta,
 		"favs":          favs,
 		"sniperEnabled": ms.mgr.Settings().SniperEnabled,
 		"accountNick":   conn.Account().Nick,

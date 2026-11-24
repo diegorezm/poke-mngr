@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,12 +16,87 @@ import (
 	"poke-mngr/internal/config"
 )
 
-// ItemCatalog caches /assets/items.json for NPC potion/revive prices & heal values.
+type ItemDisplayMeta struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Icon     string `json:"icon"`
+	Category string `json:"category"`
+	Rare     bool   `json:"rare"`
+	NPCPrice int64  `json:"npcPrice"`
+}
+
+var (
+	zmovePieceRe = regexp.MustCompile(`(AoE )?\bTM Disk Piece\b`)
+	zmoveDiskRe  = regexp.MustCompile(`\b([A-Za-z]+)-Type TM Disk\b( Piece)?`)
+	zmoveTypes   = map[string]bool{
+		"normal": true, "fire": true, "water": true, "grass": true, "electric": true, "ice": true,
+		"fighting": true, "poison": true, "ground": true, "flying": true, "psychic": true,
+		"bug": true, "rock": true, "ghost": true, "dragon": true, "dark": true, "steel": true, "fairy": true,
+	}
+)
+
+func formatItemDisplayName(raw string) string {
+	if !strings.Contains(raw, "TM Disk") {
+		return raw
+	}
+	s := zmovePieceRe.ReplaceAllStringFunc(raw, func(m string) string {
+		if strings.HasPrefix(m, "AoE ") {
+			return m
+		}
+		return "Fragmento de Z-Move"
+	})
+	return zmoveDiskRe.ReplaceAllStringFunc(s, func(m string) string {
+		if strings.HasSuffix(m, " Piece") {
+			return m
+		}
+		sub := zmoveDiskRe.FindStringSubmatch(m)
+		if len(sub) >= 2 {
+			return "Z-Move " + strings.ToUpper(sub[1])
+		}
+		return m
+	})
+}
+
+func zmoveIconOverride(id int, rawName string) string {
+	switch id {
+	case 59194:
+		return config.SiteOrigin + "/img/itens/zmove/fragmento.png"
+	case 40530:
+		return config.SiteOrigin + "/img/itens/zmove/aoe-peca.png"
+	case 40575:
+		return config.SiteOrigin + "/img/itens/zmove/aoe-disco.png"
+	}
+	sub := zmoveDiskRe.FindStringSubmatch(rawName)
+	if len(sub) >= 2 && sub[2] == "" {
+		t := strings.ToLower(sub[1])
+		if zmoveTypes[t] {
+			return config.SiteOrigin + "/img/itens/zmove/" + t + ".png"
+		}
+	}
+	return ""
+}
+
+func fullAssetURL(rel string) string {
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return ""
+	}
+	if strings.HasPrefix(rel, "http://") || strings.HasPrefix(rel, "https://") {
+		return rel
+	}
+	if strings.HasPrefix(rel, "/") {
+		return config.SiteOrigin + rel
+	}
+	return config.SiteOrigin + "/assets/" + rel
+}
+
+// ItemCatalog caches /assets/items.json + /assets/items-icons.json for names, icons, and NPC prices.
 type ItemCatalog struct {
 	mu      sync.RWMutex
 	potions []ShopItemMeta
 	revives []ShopItemMeta
 	byID    map[int]ShopItemMeta
+	display map[int]ItemDisplayMeta
 	loaded  time.Time
 }
 
@@ -28,9 +104,19 @@ func NewItemCatalog() *ItemCatalog {
 	ic := &ItemCatalog{
 		potions: append([]ShopItemMeta(nil), DefaultNPCPotions...),
 		byID:    map[int]ShopItemMeta{},
+		display: map[int]ItemDisplayMeta{},
 	}
 	for _, p := range ic.potions {
 		ic.byID[p.ID] = p
+	}
+	for id, sm := range SpecialItemMeta {
+		ic.display[id] = ItemDisplayMeta{
+			ID:       id,
+			Name:     sm.Name,
+			Icon:     sm.Icon,
+			Category: sm.Kind,
+			Rare:     sm.Kind == "rare",
+		}
 	}
 	return ic
 }
@@ -42,34 +128,46 @@ func (ic *ItemCatalog) EnsureLoaded(ctx context.Context) {
 	if fresh {
 		return
 	}
+
 	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, config.SiteOrigin+"/assets/items.json", nil)
-	if err != nil {
-		return
+	fetchJSON := func(path string) any {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, config.SiteOrigin+path, nil)
+		if err != nil {
+			return nil
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil
+		}
+		var out any
+		if json.NewDecoder(resp.Body).Decode(&out) != nil {
+			return nil
+		}
+		return out
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return
-	}
-	var raw any
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+
+	rawItems := fetchJSON("/assets/items.json")
+	rawIcons := asMap(fetchJSON("/assets/items-icons.json"))
+	if rawItems == nil {
 		return
 	}
 
 	var entries []map[string]any
-	if sl := asSlice(raw); sl != nil {
-		for _, x := range sl {
-			if m := asMap(x); m != nil {
-				entries = append(entries, m)
+	if mp := asMap(rawItems); mp != nil {
+		if list := asSlice(mp["items"]); list != nil {
+			for _, x := range list {
+				if m := asMap(x); m != nil {
+					entries = append(entries, m)
+				}
 			}
 		}
-	} else if mp := asMap(raw); mp != nil {
-		for _, v := range mp {
-			if m := asMap(v); m != nil {
+	} else if sl := asSlice(rawItems); sl != nil {
+		for _, x := range sl {
+			if m := asMap(x); m != nil {
 				entries = append(entries, m)
 			}
 		}
@@ -84,27 +182,63 @@ func (ic *ItemCatalog) EnsureLoaded(ctx context.Context) {
 		if id <= 0 {
 			continue
 		}
-		price := asInt64(it["preco"])
+		rawName := asString(it["name"])
+		if rawName == "" {
+			rawName = asString(it["nome"])
+		}
+		dispName := formatItemDisplayName(rawName)
+		price := asInt64(it["npcPrice"])
+		if price == 0 {
+			price = asInt64(it["preco"])
+		}
 		if price == 0 {
 			price = asInt64(it["price"])
 		}
-		name := asString(it["nome"])
-		if name == "" {
-			name = asString(it["name"])
+		cat := strings.ToLower(asString(it["category"]))
+		if cat == "" {
+			cat = strings.ToLower(asString(it["tipo"]))
 		}
-		tipo := strings.ToLower(asString(it["tipo"]))
-		if tipo == "" {
-			tipo = strings.ToLower(asString(it["type"]))
+		icon := zmoveIconOverride(id, rawName)
+		if icon == "" && rawIcons != nil {
+			if rel := asString(rawIcons[strconv.Itoa(id)]); rel != "" {
+				icon = fullAssetURL(rel)
+			}
 		}
+		if icon == "" {
+			if rel := asString(it["icon"]); rel != "" {
+				if !strings.Contains(rel, "/") {
+					rel = "site/assets/items/" + rel
+				}
+				icon = fullAssetURL(rel)
+			}
+		}
+		if sm, ok := SpecialItemMeta[id]; ok {
+			if dispName == "" {
+				dispName = sm.Name
+			}
+			if icon == "" {
+				icon = sm.Icon
+			}
+		}
+
+		ic.display[id] = ItemDisplayMeta{
+			ID:       id,
+			Name:     dispName,
+			Icon:     icon,
+			Category: cat,
+			Rare:     asBool(it["rare"]) || id >= 70000 || zmoveIconOverride(id, rawName) != "",
+			NPCPrice: price,
+		}
+
 		meta := ShopItemMeta{
 			ID:      id,
 			Kind:    "item",
-			Name:    name,
+			Name:    dispName,
 			Price:   price,
 			HealHP:  asInt(it["cura"]),
 			HealPct: asFloat(it["curaPct"]),
 		}
-		if strings.Contains(tipo, "revive") || strings.Contains(strings.ToLower(name), "revive") {
+		if strings.Contains(cat, "revive") || strings.Contains(strings.ToLower(rawName), "revive") {
 			meta.IsRevive = true
 			if price > 0 {
 				revives = append(revives, meta)
@@ -114,6 +248,22 @@ func (ic *ItemCatalog) EnsureLoaded(ctx context.Context) {
 		}
 		ic.byID[id] = meta
 	}
+
+	// Ensure special server-only items (70010..70070) remain populated
+	for id, sm := range SpecialItemMeta {
+		cur := ic.display[id]
+		if cur.Name == "" {
+			cur.ID = id
+			cur.Name = sm.Name
+			cur.Category = sm.Kind
+			cur.Rare = sm.Kind == "rare"
+		}
+		if cur.Icon == "" {
+			cur.Icon = sm.Icon
+		}
+		ic.display[id] = cur
+	}
+
 	if len(potions) > 0 {
 		ic.potions = potions
 	}
@@ -121,6 +271,23 @@ func (ic *ItemCatalog) EnsureLoaded(ctx context.Context) {
 		ic.revives = revives
 	}
 	ic.loaded = time.Now()
+}
+
+func (ic *ItemCatalog) Display(id int) (ItemDisplayMeta, bool) {
+	ic.mu.RLock()
+	defer ic.mu.RUnlock()
+	m, ok := ic.display[id]
+	return m, ok
+}
+
+func (ic *ItemCatalog) AllDisplay() map[string]ItemDisplayMeta {
+	ic.mu.RLock()
+	defer ic.mu.RUnlock()
+	out := make(map[string]ItemDisplayMeta, len(ic.display))
+	for id, m := range ic.display {
+		out[strconv.Itoa(id)] = m
+	}
+	return out
 }
 
 func (ic *ItemCatalog) UnitPrice(kind string, id int) int64 {
@@ -162,7 +329,6 @@ func (ic *ItemCatalog) TotalRevives(items map[string]any) int {
 	return total
 }
 
-// BestCostPotion mirrors pokeidleDeck's gold-per-useful-HP calculation.
 func (ic *ItemCatalog) BestCostPotion(maxHP int, hpThreshold float64) int {
 	if maxHP <= 0 {
 		return 204
@@ -198,6 +364,196 @@ func (ic *ItemCatalog) BestCostPotion(maxHP int, hpThreshold float64) int {
 		}
 	}
 	return bestID
+}
+
+// --- CreatureCatalog (for hunt sprites, types, and loot — matches actions_api.py) ---
+
+type CreatureMeta struct {
+	PokeID   int
+	Name     string
+	Looktype int
+	Types    []string
+	Loot     []string
+}
+
+var outlandPrefixes = []string{
+	"Brave ", "Tribal ", "Ancient ", "War ", "Furious ", "Charged ", "Magnetic ", "Evil ", "Freezing ", "Psy ",
+	"Heavy ", "Milch-", "Roll ", "Hard ", "Brute ", "Enraged ", "Dark ", "Trickmaster ", "Banshee ",
+	"Taekwondo ", "Enigmatic ", "Magma ", "Toxic ",
+}
+
+type CreatureCatalog struct {
+	mu     sync.RWMutex
+	byID   map[int]CreatureMeta
+	byName map[string]CreatureMeta
+	loaded time.Time
+}
+
+func NewCreatureCatalog() *CreatureCatalog {
+	return &CreatureCatalog{
+		byID:   map[int]CreatureMeta{},
+		byName: map[string]CreatureMeta{},
+	}
+}
+
+func (cc *CreatureCatalog) EnsureLoaded(ctx context.Context) {
+	cc.mu.RLock()
+	fresh := time.Since(cc.loaded) < 6*time.Hour && !cc.loaded.IsZero()
+	cc.mu.RUnlock()
+	if fresh {
+		return
+	}
+
+	files := []string{
+		"/assets/creatures.json",
+		"/assets/creatures-novos.json",
+		"/assets/creatures-outland-novos.json",
+		"/assets/creatures-formas.json",
+		"/assets/creatures-sprites-lab.json",
+	}
+	client := &http.Client{Timeout: 20 * time.Second}
+	results := make([]map[string]any, len(files))
+	var wg sync.WaitGroup
+	for i, path := range files {
+		wg.Add(1)
+		go func(idx int, p string) {
+			defer wg.Done()
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, config.SiteOrigin+p, nil)
+			if err != nil {
+				return
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return
+			}
+			var m map[string]any
+			if json.NewDecoder(resp.Body).Decode(&m) == nil {
+				results[idx] = m
+			}
+		}(i, path)
+	}
+	wg.Wait()
+	if results[0] == nil {
+		return
+	}
+
+	byID := map[int]CreatureMeta{}
+	byName := map[string]CreatureMeta{}
+	for i := 0; i < 4; i++ {
+		if results[i] == nil {
+			continue
+		}
+		for _, raw := range asSlice(results[i]["creatures"]) {
+			c := asMap(raw)
+			if c == nil || c["pokeId"] == nil {
+				continue
+			}
+			pid := asInt(c["pokeId"])
+			if pid >= 10501 && pid < 10548 {
+				pid = pid - (10501 - 2001)
+			}
+			if _, exists := byID[pid]; exists {
+				continue
+			}
+			var tipos []string
+			if t1 := strings.ToUpper(asString(c["type1"])); t1 != "" {
+				tipos = append(tipos, t1)
+			}
+			if t2 := strings.ToUpper(asString(c["type2"])); t2 != "" {
+				tipos = append(tipos, t2)
+			}
+			var loot []string
+			for _, lr := range asSlice(c["loot"]) {
+				if lm := asMap(lr); lm != nil {
+					if ln := asString(lm["name"]); ln != "" {
+						loot = append(loot, ln)
+					}
+				}
+			}
+			cm := CreatureMeta{
+				PokeID:   pid,
+				Name:     asString(c["name"]),
+				Looktype: asInt(c["looktype"]),
+				Types:    tipos,
+				Loot:     loot,
+			}
+			byID[pid] = cm
+			if pid <= 1025 && cm.Name != "" {
+				byName[strings.ToLower(cm.Name)] = cm
+			}
+		}
+	}
+
+	// Apply creatures-sprites-lab.json looktype patches
+	if lab := results[4]; lab != nil {
+		for _, raw := range asSlice(lab["patches"]) {
+			pm := asMap(raw)
+			if pm == nil {
+				continue
+			}
+			pid := asInt(pm["pokeId"])
+			lt := asInt(pm["looktype"])
+			if cm, ok := byID[pid]; ok && lt > 0 {
+				cm.Looktype = lt
+				byID[pid] = cm
+				if pid <= 1025 && cm.Name != "" {
+					byName[strings.ToLower(cm.Name)] = cm
+				}
+			}
+		}
+	}
+
+	// Inherit base species looktype for Orre (13000..13999) and Outland (2001..2059)
+	for pid, cm := range byID {
+		var base CreatureMeta
+		var ok bool
+		if pid >= 13000 && pid < 14000 {
+			base, ok = byID[pid-13000]
+		} else if pid >= 2001 && pid <= 2059 {
+			nm := strings.TrimSpace(cm.Name)
+			for _, pre := range outlandPrefixes {
+				if strings.HasPrefix(nm, pre) {
+					nm = strings.TrimPrefix(nm, pre)
+					break
+				}
+			}
+			base, ok = byName[strings.ToLower(nm)]
+		}
+		if ok && base.Looktype > 1 {
+			cm.Looktype = base.Looktype
+			byID[pid] = cm
+		}
+	}
+
+	cc.mu.Lock()
+	cc.byID = byID
+	cc.byName = byName
+	cc.loaded = time.Now()
+	cc.mu.Unlock()
+}
+
+func (cc *CreatureCatalog) Get(pokeID int) (CreatureMeta, bool) {
+	if cc == nil {
+		return CreatureMeta{}, false
+	}
+	cc.mu.RLock()
+	defer cc.mu.RUnlock()
+	m, ok := cc.byID[pokeID]
+	return m, ok
+}
+
+func (cc *CreatureCatalog) ByName(name string) (CreatureMeta, bool) {
+	if cc == nil || name == "" {
+		return CreatureMeta{}, false
+	}
+	cc.mu.RLock()
+	defer cc.mu.RUnlock()
+	m, ok := cc.byName[strings.ToLower(strings.TrimSpace(name))]
+	return m, ok
 }
 
 // --- Sprite Atlas & Outfit Proxy ---

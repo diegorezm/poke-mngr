@@ -18,9 +18,13 @@ import {
   GlobalSettings,
   POTION_OPTIONS,
   ProxyConfig,
+  REVIVE_ICON,
+  ballIcon,
   defaultAccountOptions,
+  potionIcon,
 } from "../lib/types";
 import { api } from "../lib/api";
+import { ItemSprite } from "./PokemonSprite";
 
 export function SettingsView({
   settings,
@@ -539,6 +543,7 @@ export function SettingsView({
                         })
                       }
                     />
+                    <ItemSprite icon={potionIcon(editing.options.restock.potion.id || 204)} size={20} />
                     Poções
                   </label>
                   <select
@@ -627,6 +632,7 @@ export function SettingsView({
                         })
                       }
                     />
+                    <ItemSprite icon={ballIcon(editing.options.restock.ball.id || 4)} size={20} />
                     Pokébolas
                   </label>
                   <select
@@ -715,6 +721,7 @@ export function SettingsView({
                         })
                       }
                     />
+                    <ItemSprite icon={REVIVE_ICON} size={20} />
                     Revives (mais barato)
                   </label>
                   <div className="text-[11px] text-slate-500 py-1">

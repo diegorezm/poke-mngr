@@ -1,6 +1,7 @@
 package pokeidle
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -129,20 +130,29 @@ func (m *AccountManager) BuildInventory(accountID int) InventorySummary {
 			kind := "item"
 			name := fmt.Sprintf("Item #%d", iid)
 			icon := ""
+			if dm, ok := m.catalog.Display(iid); ok {
+				if dm.Name != "" {
+					name = dm.Name
+				}
+				if dm.Icon != "" {
+					icon = dm.Icon
+				}
+				if dm.Rare {
+					kind = "rare"
+				} else if dm.Category == "potion" {
+					kind = "potion"
+				}
+			}
 			if sm, ok := SpecialItemMeta[iid]; ok {
 				name = sm.Name
 				kind = sm.Kind
 				icon = sm.Icon
 			} else if srv := itensNossos[iid]; srv != nil {
 				if n := asString(srv["nome"]); n != "" {
-					name = n
+					name = formatItemDisplayName(n)
 				}
 				if ic := asString(srv["icone"]); ic != "" {
-					if ic[0] == '/' {
-						icon = "https://pokeidle.io" + ic
-					} else {
-						icon = ic
-					}
+					icon = fullAssetURL(ic)
 				}
 				if iid >= 70000 {
 					kind = "rare"
@@ -301,9 +311,10 @@ func (m *AccountManager) BuildHuntsCatalog(accountID int) HuntsCatalog {
 	if conn == nil {
 		return HuntsCatalog{OutlandTiers: DefaultOutlandTiers, Hunts: []HuntInfo{}}
 	}
+	m.creatures.EnsureLoaded(context.Background())
 	snap := conn.Snapshot()
 	conn.mu.RLock()
-	hunts := BuildHuntInfoList(conn.hunts)
+	hunts := BuildHuntInfoList(conn.hunts, m.creatures)
 	tiers := NormalizeOutlandTiers(conn.outlandTiers)
 	conn.mu.RUnlock()
 

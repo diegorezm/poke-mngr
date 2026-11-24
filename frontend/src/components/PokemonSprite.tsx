@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 
+const SITE = "https://pokeidle.io";
+
 interface AtlasData {
   version?: string | number;
   cols: number;
   rows: number;
+  image?: string;
+  slots?: Record<string, [number, number] | { col: number; row: number }>;
   entries?: Record<string, [number, number] | { col: number; row: number }>;
   markers?: Record<string, [number, number] | { col: number; row: number }>;
 }
@@ -60,12 +64,13 @@ export function PokemonSprite({
   const [outfit, setOutfit] = useState<OutfitSprite | null>(null);
 
   useEffect(() => {
+    setOutfit(null);
     if (!looktype || !bridgePort) return;
     let alive = true;
     loadAtlas(bridgePort).then((a) => {
       if (!alive) return;
       setAtlas(a);
-      const map = a?.entries || a?.markers || {};
+      const map = a?.slots || a?.entries || a?.markers || {};
       if (!map[String(looktype)]) {
         loadOutfit(bridgePort, looktype).then((o) => {
           if (alive) setOutfit(o);
@@ -77,20 +82,24 @@ export function PokemonSprite({
     };
   }, [looktype, bridgePort]);
 
-  const map = atlas?.entries || atlas?.markers || {};
+  const map = atlas?.slots || atlas?.entries || atlas?.markers || {};
   const entry = looktype ? map[String(looktype)] : undefined;
 
   if (atlas && entry) {
     const col = Array.isArray(entry) ? entry[0] : entry.col;
     const row = Array.isArray(entry) ? entry[1] : entry.row;
-    const v = atlas.version ? `?v=${atlas.version}` : "";
+    const imgUrl = atlas.image
+      ? atlas.image.startsWith("http")
+        ? atlas.image
+        : `${SITE}${atlas.image}`
+      : `${SITE}/assets/site/assets/maps/marker-atlas.webp${atlas.version ? `?v=${atlas.version}` : ""}`;
     return (
       <div
         className={`relative shrink-0 pixelated ${className}`}
         style={{
           width: size,
           height: size,
-          backgroundImage: `url("https://pokeidle.io/assets/site/assets/maps/marker-atlas.png${v}")`,
+          backgroundImage: `url("${imgUrl}")`,
           backgroundSize: `${atlas.cols * size}px ${atlas.rows * size}px`,
           backgroundPosition: `${-col * size}px ${-row * size}px`,
           backgroundRepeat: "no-repeat",
@@ -134,7 +143,6 @@ export function PokemonSprite({
     );
   }
 
-  // Crisp fallback Pokéball icon
   return (
     <div
       className={`relative flex items-center justify-center rounded-full bg-slate-800/80 border border-slate-700 shrink-0 ${className}`}
@@ -147,5 +155,47 @@ export function PokemonSprite({
         <circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" strokeWidth="1.8" />
       </svg>
     </div>
+  );
+}
+
+export function ItemSprite({
+  icon,
+  size = 24,
+  alt = "",
+  className = "",
+}: {
+  icon?: string | null;
+  size?: number;
+  alt?: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [icon]);
+
+  if (!icon || failed) {
+    return (
+      <span
+        className={`inline-flex items-center justify-center rounded bg-slate-800/80 border border-slate-700/70 text-[10px] text-slate-500 shrink-0 ${className}`}
+        style={{ width: size, height: size }}
+      >
+        ?
+      </span>
+    );
+  }
+
+  const src = icon.startsWith("http") ? icon : `${SITE}${icon.startsWith("/") ? "" : "/assets/"}${icon}`;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className={`pixelated object-contain shrink-0 ${className}`}
+      style={{ width: size, height: size }}
+    />
   );
 }

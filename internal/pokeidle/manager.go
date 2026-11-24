@@ -21,9 +21,10 @@ type AccountManager struct {
 	cancel   context.CancelFunc
 	store    *store.Store
 	settings config.GlobalSettings
-	notifier *Notifier
-	catalog  *ItemCatalog
-	sprites  *SpriteProxy
+	notifier  *Notifier
+	catalog   *ItemCatalog
+	creatures *CreatureCatalog
+	sprites   *SpriteProxy
 	bridge   *BridgeHub
 	official *OfficialStreamers
 	chat     *ChatHub
@@ -40,19 +41,21 @@ func NewAccountManager(st *store.Store) *AccountManager {
 	gs := st.LoadGlobalSettings()
 	notifier := NewNotifier(gs.DiscordWebhookURL)
 	catalog := NewItemCatalog()
+	creatures := NewCreatureCatalog()
 	sprites := NewSpriteProxy()
 	official := NewOfficialStreamers()
 
 	mgr := &AccountManager{
-		store:    st,
-		settings: gs,
-		notifier: notifier,
-		catalog:  catalog,
-		sprites:  sprites,
-		official: official,
-		chat:     NewChatHub(),
-		conns:    map[int]*AccountConnection{},
-		dirtyCh:  make(chan struct{}, 1),
+		store:     st,
+		settings:  gs,
+		notifier:  notifier,
+		catalog:   catalog,
+		creatures: creatures,
+		sprites:   sprites,
+		official:  official,
+		chat:      NewChatHub(),
+		conns:     map[int]*AccountConnection{},
+		dirtyCh:   make(chan struct{}, 1),
 	}
 	mgr.bridge = NewBridgeHub(mgr, sprites, uuid.NewString())
 	mgr.market = NewMarketService(mgr, st)
@@ -69,6 +72,7 @@ func (m *AccountManager) Start(parent context.Context) error {
 	}
 	go m.notifier.Run(ctx)
 	go m.catalog.EnsureLoaded(ctx)
+	go m.creatures.EnsureLoaded(ctx)
 	go m.market.RunRuleLoop(ctx)
 
 	accounts, err := m.store.ListAccounts()

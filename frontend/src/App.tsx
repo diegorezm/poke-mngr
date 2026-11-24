@@ -345,7 +345,11 @@ export function App() {
           )}
 
           {tab === "mercado" && (
-            <MarketView accounts={snap.accounts} onToast={showToast} />
+            <MarketView
+              accounts={snap.accounts}
+              bridgePort={snap.bridgePort}
+              onToast={showToast}
+            />
           )}
 
           {tab === "pvp" && (

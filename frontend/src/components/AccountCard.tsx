@@ -11,8 +11,6 @@ import {
   Swords,
   ShieldAlert,
   Clock,
-  FlaskConical,
-  CircleDot,
   Globe,
 } from "lucide-react";
 import {
@@ -20,11 +18,13 @@ import {
   BALL_OPTIONS,
   CardStyle,
   POTION_OPTIONS,
+  ballIcon,
   fmtCompact,
   fmtDuration,
+  potionIcon,
 } from "../lib/types";
 import { api } from "../lib/api";
-import { PokemonSprite } from "./PokemonSprite";
+import { ItemSprite, PokemonSprite } from "./PokemonSprite";
 
 const STATE_META: Record<
   string,
@@ -476,8 +476,12 @@ export function AccountCard({
               onClick={() => setEquipMenu(equipMenu === "potion" ? null : "potion")}
               className="flex items-center justify-between rounded-xl bg-[#0b0e1b] hover:bg-slate-800/70 border border-slate-800 px-3 py-2 text-left transition disabled:opacity-50"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <FlaskConical className="w-4 h-4 text-rose-400 shrink-0" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <ItemSprite
+                  icon={potionIcon(acc.equippedPotion?.id)}
+                  size={26}
+                  alt={acc.equippedPotion?.name || "Poção"}
+                />
                 <div className="min-w-0">
                   <div className="text-[10px] text-slate-500">Poção</div>
                   <div className="text-xs font-medium text-slate-200 truncate">
@@ -495,8 +499,12 @@ export function AccountCard({
               onClick={() => setEquipMenu(equipMenu === "ball" ? null : "ball")}
               className="flex items-center justify-between rounded-xl bg-[#0b0e1b] hover:bg-slate-800/70 border border-slate-800 px-3 py-2 text-left transition disabled:opacity-50"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <CircleDot className="w-4 h-4 text-sky-400 shrink-0" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <ItemSprite
+                  icon={ballIcon(acc.equippedBall?.id)}
+                  size={26}
+                  alt={acc.equippedBall?.name || "Pokébola"}
+                />
                 <div className="min-w-0">
                   <div className="text-[10px] text-slate-500">Pokébola</div>
                   <div className="text-xs font-medium text-slate-200 truncate">
@@ -512,15 +520,26 @@ export function AccountCard({
             {equipMenu && (
               <div className="absolute left-0 right-0 bottom-full mb-2 z-20 rounded-xl bg-[#161b30] border border-slate-700 shadow-2xl p-2 grid grid-cols-2 gap-1.5">
                 {(equipMenu === "potion" ? POTION_OPTIONS : BALL_OPTIONS).map(
-                  (opt) => (
-                    <button
-                      key={opt.id}
-                      onClick={() => handleEquip(equipMenu, opt.id)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs text-left text-slate-200 hover:bg-indigo-500/25 hover:text-white transition"
-                    >
-                      {opt.name}
-                    </button>
-                  )
+                  (opt) => {
+                    const selected =
+                      equipMenu === "potion"
+                        ? acc.equippedPotion?.id === opt.id
+                        : acc.equippedBall?.id === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => handleEquip(equipMenu, opt.id)}
+                        className={`px-2.5 py-2 rounded-lg text-xs text-left flex items-center gap-2.5 border transition ${
+                          selected
+                            ? "bg-amber-500/15 border-amber-500/40 text-amber-200"
+                            : "bg-[#0d1122] border-slate-800 text-slate-200 hover:bg-indigo-500/25 hover:border-indigo-500/40 hover:text-white"
+                        }`}
+                      >
+                        <ItemSprite icon={opt.icon} size={24} alt={opt.name} />
+                        <span className="font-medium truncate">{opt.name}</span>
+                      </button>
+                    );
+                  }
                 )}
               </div>
             )}
