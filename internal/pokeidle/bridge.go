@@ -106,6 +106,7 @@ func (b *BridgeHub) Start() (int, error) {
 	mux.HandleFunc("/bridge/", b.handleBridgeWS)
 	mux.HandleFunc("/api/sprite-atlas", b.handleSpriteAtlas)
 	mux.HandleFunc("/api/sprite/", b.handleSpriteOutfit)
+	mux.HandleFunc("/api/wishlist", b.handleWishlist)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -222,13 +223,23 @@ func (b *BridgeHub) handleProxiedGameApp(w http.ResponseWriter, r *http.Request)
 	acc := conn.Account()
 	gs := b.manager.Settings()
 	initJS := buildBridgeBootstrapJS(acc.ID, acc.Nick, acc.Token, acc.DeviceID, b.port, b.secret, gs.DeckReduceMotion, gs.DeckUltra)
-	injectTag := "<head>\n<script>" + initJS + "</script>\n"
+	var headInject strings.Builder
+	headInject.WriteString("<head>\n<script>")
+	headInject.WriteString(initJS)
+	headInject.WriteString("</script>\n")
+	if b.manager.HuntExt() != nil {
+		for _, script := range b.manager.HuntExt().Scripts(gs.DeckHuntExt, b.secret) {
+			headInject.WriteString("<script>")
+			headInject.WriteString(strings.ReplaceAll(script, "</script>", `<\/script>`))
+			headInject.WriteString("</script>\n")
+		}
+	}
 
 	html := string(bodyBytes)
 	if strings.Contains(html, "<head>") {
-		html = strings.Replace(html, "<head>", injectTag, 1)
+		html = strings.Replace(html, "<head>", headInject.String(), 1)
 	} else {
-		html = "<script>" + initJS + "</script>\n" + html
+		html = strings.TrimPrefix(headInject.String(), "<head>\n") + html
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -389,6 +400,25 @@ func (b *BridgeHub) handleSpriteOutfit(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=21600")
 	_ = json.NewEncoder(w).Encode(data)
+}
+
+func (b *BridgeHub) handleWishlist(w http.ResponseWriter, r *http.Request) {
+	if b.secret != "" && r.URL.Query().Get("s") != b.secret {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if b.manager.HuntExt() == nil {
+		http.Error(w, "hunt extension unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	body, err := b.manager.HuntExt().FetchWishlist(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(body)
 }
 
 func corsLocalMiddleware(next http.Handler) http.Handler {
@@ -564,9 +594,93 @@ func buildBridgeBootstrapJS(accID int, nick, token, deviceID string, bridgePort 
     return isUltra();
   }
 
+  // 5. Click Echo across Deck panes (pokeidleDeck echo.js + REPLAY_JS technique, opt-in)
+  var ACC_ID = %d;
+  var echoEnabled = false;
+  var CLICKABLE_SEL = 'button, a, input, select, textarea, label, summary, [role=button], [role=tab], [role=menuitem], [role=option], [onclick], [tabindex]';
+
+  function echoTextOf(el) {
+    if (!el) return '';
+    return String(el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText || el.value || '')
+      .trim().replace(/\s+/g, ' ').slice(0, 80);
+  }
+
+  function echoPathOf(el) {
+    var parts = [];
+    for (var cur = el; cur && cur !== document.body && cur.parentElement; cur = cur.parentElement) {
+      var children = cur.parentElement.children;
+      var same = [];
+      for (var i = 0; i < children.length; i++) {
+        if (children[i].tagName === cur.tagName) same.push(children[i]);
+      }
+      var idx = same.indexOf(cur) + 1;
+      parts.unshift(cur.tagName.toLowerCase() + (same.length > 1 ? ':nth-of-type(' + idx + ')' : ''));
+    }
+    return parts.length ? 'body > ' + parts.join(' > ') : 'body';
+  }
+
+  function replayEchoClick(m) {
+    if (!m || typeof m !== 'object') return false;
+    var el = null;
+    try { el = document.querySelector(String(m.path || '')); } catch (e) {}
+    if (el && echoTextOf(el) !== String(m.text || '')) el = null;
+    if (!el && m.text) {
+      var tag = String(m.tag || '').replace(/[^a-zA-Z0-9-]/g, '');
+      if (tag) {
+        try {
+          var all = document.querySelectorAll(tag);
+          var matches = [];
+          for (var i = 0; i < all.length; i++) {
+            if (echoTextOf(all[i]) === m.text) matches.push(all[i]);
+          }
+          if (matches.length === 1) el = matches[0];
+        } catch (e) {}
+      }
+    }
+    if (!el) return false;
+    var r = el.getBoundingClientRect();
+    var fx = typeof m.fx === 'number' ? Math.max(0, Math.min(1, m.fx)) : 0.5;
+    var fy = typeof m.fy === 'number' ? Math.max(0, Math.min(1, m.fy)) : 0.5;
+    var base = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+      button: 0,
+      clientX: r.left + r.width * fx,
+      clientY: r.top + r.height * fy
+    };
+    var pointer = Object.assign({}, base, { pointerId: 1, pointerType: 'mouse', isPrimary: true });
+    try {
+      el.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, pointer, { buttons: 1 })));
+      el.dispatchEvent(new MouseEvent('mousedown', Object.assign({}, base, { buttons: 1 })));
+      el.dispatchEvent(new PointerEvent('pointerup', pointer));
+      el.dispatchEvent(new MouseEvent('mouseup', base));
+    } catch (e) {}
+    el.click();
+    return true;
+  }
+
+  window.addEventListener('click', function(e) {
+    if (!echoEnabled || !e.isTrusted || !(e.target instanceof Element)) return;
+    if (!window.parent || window.parent === window) return;
+    var el = e.target.closest(CLICKABLE_SEL) || e.target;
+    var r = el.getBoundingClientRect();
+    var click = {
+      path: echoPathOf(el),
+      tag: el.tagName.toLowerCase(),
+      text: echoTextOf(el),
+      fx: r.width ? (e.clientX - r.left) / r.width : 0.5,
+      fy: r.height ? (e.clientY - r.top) / r.height : 0.5
+    };
+    window.parent.postMessage({ __pokeMngr: true, type: 'deckClick', accountId: ACC_ID, click: click }, '*');
+  }, true);
+
   window.__pokeMngrDeck = {
     setUltra: applyUltra,
-    setReduceMotion: applyReduceMotion
+    setReduceMotion: applyReduceMotion,
+    setEcho: function(on) { echoEnabled = !!on; return echoEnabled; },
+    replayClick: replayEchoClick
   };
 
   window.addEventListener('message', function(ev) {
@@ -574,6 +688,14 @@ func buildBridgeBootstrapJS(accID int, nick, token, deviceID string, bridgePort 
     if (!d || typeof d !== 'object' || d.__pokeMngr !== true) return;
     if (d.type === 'setUltra') applyUltra(!!d.value);
     if (d.type === 'setReduceMotion') applyReduceMotion(!!d.value);
+    if (d.type === 'setEcho') echoEnabled = !!d.value;
+    if (d.type === 'replayClick' && d.click) {
+      var ok = replayEchoClick(d.click);
+      if (!ok && window.parent && window.parent !== window) {
+        var label = d.click.text ? '"' + d.click.text + '"' : 'esse botão';
+        window.parent.postMessage({ __pokeMngr: true, type: 'echoMiss', accountId: ACC_ID, label: label }, '*');
+      }
+    }
   });
-})();`, string(sessBytes), string(devBytes), ultraVal, string(bridgeURLBytes), reduceMotion)
+})();`, string(sessBytes), string(devBytes), ultraVal, string(bridgeURLBytes), reduceMotion, accID)
 }

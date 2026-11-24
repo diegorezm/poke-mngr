@@ -31,6 +31,7 @@ type AccountManager struct {
 	chat     *ChatHub
 	market   *MarketService
 	fichas   *PublicFichaHub
+	huntExt  *HuntExtension
 
 	conns map[int]*AccountConnection
 
@@ -60,9 +61,11 @@ func NewAccountManager(st *store.Store) *AccountManager {
 		official:  official,
 		chat:      NewChatHub(),
 		fichas:    NewPublicFichaHub(),
+		huntExt:   NewHuntExtension(),
 		conns:     map[int]*AccountConnection{},
 		dirtyCh:   make(chan struct{}, 1),
 	}
+	mgr.huntExt.Load()
 	mgr.bridge = NewBridgeHub(mgr, sprites, uuid.NewString())
 	mgr.market = NewMarketService(mgr, st)
 	return mgr
@@ -82,6 +85,7 @@ func (m *AccountManager) Start(parent context.Context) error {
 	go m.catalog.EnsureLoaded(ctx)
 	go m.creatures.EnsureLoaded(ctx)
 	go m.market.RunRuleLoop(ctx)
+	m.huntExt.UpdateLater(ctx, m.Settings().DeckHuntExt)
 
 	accounts, err := m.store.ListAccounts()
 	if err != nil {
@@ -139,6 +143,10 @@ func (m *AccountManager) Market() *MarketService {
 
 func (m *AccountManager) Store() *store.Store {
 	return m.store
+}
+
+func (m *AccountManager) HuntExt() *HuntExtension {
+	return m.huntExt
 }
 
 func (m *AccountManager) ListPvpViews() []PvpAccountView {

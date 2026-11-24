@@ -145,6 +145,13 @@ export interface EvolutionProjection {
     "alcance": number;
 }
 
+export interface HuntExtStatus {
+    "enabled": boolean;
+    "installed": boolean;
+    "version": string;
+    "error"?: string;
+}
+
 export interface HuntInfo {
     "slug": string;
     "nome": string;

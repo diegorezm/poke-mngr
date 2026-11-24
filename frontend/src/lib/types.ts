@@ -565,6 +565,36 @@ export function fmtBytes(bytes: number | undefined | null): string {
   return `${Math.round(mb)} MB`;
 }
 
+export interface HuntExtStatus {
+  enabled: boolean;
+  installed: boolean;
+  version: string;
+  error?: string;
+}
+
+export interface UpdateState {
+  enabled: boolean;
+  repo: string;
+  current: string;
+  latest: string;
+  available: boolean;
+  notes: string;
+  url: string;
+  installerName?: string;
+  checkedAt: number;
+  error?: string;
+  canApply: boolean;
+  cannotApplyReason?: string;
+  step?: string;
+  doneMessage?: string;
+}
+
+export interface UpdateApplyResult {
+  ok: boolean;
+  restarting: boolean;
+  message: string;
+}
+
 export function defaultAccountOptions(): AccountOptions {
   return {
     huntSlug: "",

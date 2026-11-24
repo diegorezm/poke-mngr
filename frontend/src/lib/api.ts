@@ -6,6 +6,7 @@ import type {
   ChatEvent,
   ChatMessage,
   GlobalSettings,
+  HuntExtStatus,
   HuntsCatalog,
   InventorySummary,
   InventoryValuation,
@@ -19,6 +20,8 @@ import type {
   ProxyConfig,
   PvpAccountView,
   TelemetrySnapshot,
+  UpdateApplyResult,
+  UpdateState,
 } from "./types";
 
 const SVC = "poke-mngr/internal/service.AppService";
@@ -54,6 +57,13 @@ export const api = {
   testDiscordWebhook: (url: string) => invoke<void>("TestDiscordWebhook", url),
   sendDailyReportNow: (url: string) => invoke<void>("SendDailyReportNow", url),
   getBookmarkletCode: () => invoke<string>("GetBookmarkletCode"),
+  getHuntExtStatus: () => invoke<HuntExtStatus>("GetHuntExtStatus"),
+  setHuntExtEnabled: (enabled: boolean) =>
+    invoke<HuntExtStatus>("SetHuntExtEnabled", enabled),
+  updateHuntExt: () => invoke<HuntExtStatus>("UpdateHuntExt"),
+  getUpdateState: () => invoke<UpdateState>("GetUpdateState"),
+  checkForUpdate: () => invoke<UpdateState>("CheckForUpdate"),
+  applyUpdate: () => invoke<UpdateApplyResult>("ApplyUpdate"),
   equipItem: (accountId: number, kind: "ball" | "potion", itemId: number) =>
     invoke<void>("EquipItem", accountId, kind, itemId),
   selectHunt: (accountId: number, slug: string) => invoke<void>("SelectHunt", accountId, slug),

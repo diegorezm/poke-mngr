@@ -20,6 +20,9 @@ import * as pokeidle$0 from "../pokeidle/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as store$0 from "../store/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as updater$0 from "../updater/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -27,6 +30,10 @@ import * as $models from "./models.js";
 
 export function AddAccount(req: $models.AddAccountRequest): $CancellablePromise<$models.AddAccountResponse> {
     return $Call.ByID(498818075, req);
+}
+
+export function ApplyUpdate(): $CancellablePromise<updater$0.ApplyResult> {
+    return $Call.ByID(1829937050);
 }
 
 export function BindApp(app: application$0.App | null): $CancellablePromise<void> {
@@ -39,6 +46,10 @@ export function BuyMarketListing(accountID: number, listingID: number, qty: numb
 
 export function CancelPendingHunt(accountID: number): $CancellablePromise<void> {
     return $Call.ByID(1645689331, accountID);
+}
+
+export function CheckForUpdate(): $CancellablePromise<updater$0.State> {
+    return $Call.ByID(3521587435);
 }
 
 export function ClaimAllPasses(): $CancellablePromise<number> {
@@ -87,6 +98,10 @@ export function GetChatMessages(canal: string): $CancellablePromise<pokeidle$0.C
 
 export function GetGameURL(accountID: number): $CancellablePromise<string> {
     return $Call.ByID(242899094, accountID);
+}
+
+export function GetHuntExtStatus(): $CancellablePromise<pokeidle$0.HuntExtStatus> {
+    return $Call.ByID(2830368667);
 }
 
 export function GetHuntsCatalog(accountID: number): $CancellablePromise<pokeidle$0.HuntsCatalog> {
@@ -163,6 +178,10 @@ export function GetSettings(): $CancellablePromise<config$0.GlobalSettings> {
 
 export function GetSnapshot(): $CancellablePromise<pokeidle$0.TelemetrySnapshot> {
     return $Call.ByID(924242415);
+}
+
+export function GetUpdateState(): $CancellablePromise<updater$0.State> {
+    return $Call.ByID(3557375867);
 }
 
 export function ListAccounts(): $CancellablePromise<config$0.AccountRecord[] | null> {
@@ -261,6 +280,10 @@ export function SetAutostart(enabled: boolean): $CancellablePromise<void> {
     return $Call.ByID(3531229700, enabled);
 }
 
+export function SetHuntExtEnabled(enabled: boolean): $CancellablePromise<pokeidle$0.HuntExtStatus> {
+    return $Call.ByID(137622990, enabled);
+}
+
 export function SetMarketSellAlert(enabled: boolean, pct: number): $CancellablePromise<void> {
     return $Call.ByID(3170449023, enabled, pct);
 }
@@ -299,6 +322,10 @@ export function ToggleMarketRule(id: number): $CancellablePromise<boolean> {
 
 export function UpdateAccount(acc: config$0.AccountRecord): $CancellablePromise<config$0.AccountRecord> {
     return $Call.ByID(85096603, acc);
+}
+
+export function UpdateHuntExt(): $CancellablePromise<pokeidle$0.HuntExtStatus> {
+    return $Call.ByID(782325888);
 }
 
 export function UpdateSettings(gs: config$0.GlobalSettings): $CancellablePromise<void> {

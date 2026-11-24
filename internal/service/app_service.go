@@ -13,12 +13,14 @@ import (
 	"poke-mngr/internal/lives"
 	"poke-mngr/internal/pokeidle"
 	"poke-mngr/internal/store"
+	"poke-mngr/internal/updater"
 )
 
 type AppService struct {
-	app   *application.App
-	mgr   *pokeidle.AccountManager
-	lives *lives.Manager
+	app     *application.App
+	mgr     *pokeidle.AccountManager
+	lives   *lives.Manager
+	updater *updater.Updater
 
 	winMu       sync.Mutex
 	gameWindows map[int]*application.WebviewWindow
@@ -26,16 +28,26 @@ type AppService struct {
 }
 
 func NewAppService(mgr *pokeidle.AccountManager) *AppService {
-	return &AppService{
+	svc := &AppService{
 		mgr:         mgr,
 		lives:       lives.NewManager(mgr, mgr.Store()),
 		gameWindows: map[int]*application.WebviewWindow{},
 		liveWindows: map[string]*application.WebviewWindow{},
 	}
+	svc.updater = updater.New(func() {
+		svc.CloseAllGameWindows()
+		if svc.app != nil {
+			svc.app.Quit()
+		}
+	})
+	return svc
 }
 
 func (s *AppService) BindApp(app *application.App) {
 	s.app = app
+	if s.updater != nil && app != nil {
+		s.updater.Start(app.Context())
+	}
 }
 
 // --- Telemetry & Accounts ---
@@ -200,6 +212,63 @@ func (s *AppService) SendDailyReportNow(webhookURL string) error {
 
 func (s *AppService) GetBookmarkletCode() string {
 	return deck.BookmarkletSnippet
+}
+
+// --- Deck /hunt Extension ---
+
+func (s *AppService) GetHuntExtStatus() pokeidle.HuntExtStatus {
+	return s.mgr.HuntExt().Status(s.mgr.Settings().DeckHuntExt)
+}
+
+func (s *AppService) SetHuntExtEnabled(enabled bool) (pokeidle.HuntExtStatus, error) {
+	if enabled {
+		if _, err := s.mgr.HuntExt().InstallOrUpdate(context.Background()); err != nil {
+			// If already installed locally, still allow enabling with cached version
+			if s.mgr.HuntExt().InstalledVersion() == "" {
+				return s.mgr.HuntExt().Status(false), err
+			}
+		}
+	}
+	gs := s.mgr.Settings()
+	gs.DeckHuntExt = enabled
+	if err := s.mgr.UpdateSettings(gs); err != nil {
+		return s.mgr.HuntExt().Status(gs.DeckHuntExt), err
+	}
+	s.reloadOpenGameWindows()
+	return s.mgr.HuntExt().Status(enabled), nil
+}
+
+func (s *AppService) reloadOpenGameWindows() {
+	s.winMu.Lock()
+	wins := make([]*application.WebviewWindow, 0, len(s.gameWindows))
+	for _, w := range s.gameWindows {
+		if w != nil {
+			wins = append(wins, w)
+		}
+	}
+	s.winMu.Unlock()
+	for _, w := range wins {
+		w.Reload()
+	}
+}
+
+func (s *AppService) UpdateHuntExt() (pokeidle.HuntExtStatus, error) {
+	_, err := s.mgr.HuntExt().InstallOrUpdate(context.Background())
+	return s.mgr.HuntExt().Status(s.mgr.Settings().DeckHuntExt), err
+}
+
+// --- Auto-Updater (GitHub Releases + NSIS) ---
+
+func (s *AppService) GetUpdateState() updater.State {
+	return s.updater.State()
+}
+
+func (s *AppService) CheckForUpdate() updater.State {
+	return s.updater.Check(context.Background())
+}
+
+func (s *AppService) ApplyUpdate() (updater.ApplyResult, error) {
+	return s.updater.Apply(context.Background())
 }
 
 // --- Live Gameplay Actions ---

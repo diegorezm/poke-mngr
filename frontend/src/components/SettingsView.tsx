@@ -11,12 +11,14 @@ import {
   Shield,
   Sliders,
   BarChart3,
+  RefreshCw,
 } from "lucide-react";
 import {
   AccountRecord,
   BALL_OPTIONS,
   CardStyle,
   GlobalSettings,
+  HuntExtStatus,
   POTION_OPTIONS,
   ProxyConfig,
   REVIVE_ICON,
@@ -28,6 +30,7 @@ import {
 } from "../lib/types";
 import { api } from "../lib/api";
 import { ItemSprite } from "./PokemonSprite";
+import { UpdateSection } from "./UpdateCard";
 
 function asAccountList(list: AccountRecord[] | null | undefined): AccountRecord[] {
   return list || [];
@@ -38,12 +41,27 @@ function formatAddedAccountToast(res: { account: AccountRecord; probe?: { level?
   return `Conta ${res.account.nick} adicionada${lvl}!`;
 }
 
+function formatHuntToggleToast(st: HuntExtStatus): string {
+  if (!st.enabled) return "Extensão /hunt desativada.";
+  return st.version
+    ? `Extensão /hunt v${st.version} ativada no Deck!`
+    : "Extensão /hunt ativada no Deck!";
+}
+
+function formatHuntUpdateToast(st: HuntExtStatus): string {
+  return st.version
+    ? `Extensão /hunt atualizada (v${st.version})!`
+    : "Extensão /hunt verificada.";
+}
+
 export function SettingsView({
   settings,
+  serverTimeMs,
   onSettingsChange,
   onToast,
 }: {
   settings: GlobalSettings;
+  serverTimeMs: number;
   onSettingsChange: (gs: GlobalSettings) => void;
   onToast: (msg: string) => void;
 }) {
@@ -76,6 +94,12 @@ export function SettingsView({
   const [gs, setGs] = useState<GlobalSettings>(settings);
   const [autostart, setAutostart] = useState(false);
   const [autostartBusy, setAutostartBusy] = useState(false);
+  const [huntStatus, setHuntStatus] = useState<HuntExtStatus>({
+    enabled: settings.deckHuntExt,
+    installed: false,
+    version: "",
+  });
+  const [huntBusy, setHuntBusy] = useState(false);
 
   useEffect(() => {
     setGs(settings);
@@ -94,6 +118,7 @@ export function SettingsView({
     reloadAccounts();
     api.getBookmarkletCode().then(setBookmarklet).catch(() => {});
     api.getAutostart().then(setAutostart).catch(() => {});
+    api.getHuntExtStatus().then(setHuntStatus).catch(() => {});
   }, []);
 
   const handleParsePaste = async (val: string) => {
@@ -246,6 +271,33 @@ export function SettingsView({
       onToast(`Erro no autostart: ${String(e)}`);
     }
     setAutostartBusy(false);
+  };
+
+  const handleToggleHuntExt = async (checked: boolean) => {
+    setHuntBusy(true);
+    try {
+      const st = await api.setHuntExtEnabled(checked);
+      setHuntStatus(st);
+      const nextGs: GlobalSettings = { ...gs, deckHuntExt: st.enabled };
+      setGs(nextGs);
+      onSettingsChange(nextGs);
+      onToast(formatHuntToggleToast(st));
+    } catch (e) {
+      onToast(`Erro na extensão /hunt: ${String(e)}`);
+    }
+    setHuntBusy(false);
+  };
+
+  const handleUpdateHuntExt = async () => {
+    setHuntBusy(true);
+    try {
+      const st = await api.updateHuntExt();
+      setHuntStatus(st);
+      onToast(formatHuntUpdateToast(st));
+    } catch (e) {
+      onToast(`Erro ao atualizar /hunt: ${String(e)}`);
+    }
+    setHuntBusy(false);
   };
 
   return (
@@ -898,10 +950,41 @@ export function SettingsView({
                 />
                 Deck: Abrir em modo ULTRA economia
               </label>
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+                <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={huntStatus.enabled}
+                    disabled={huntBusy}
+                    onChange={(e) => handleToggleHuntExt(e.target.checked)}
+                  />
+                  <span>
+                    Deck: Extensão <b>/hunt for PokeIdle</b>
+                    {huntStatus.version && (
+                      <span className="ml-1.5 font-mono text-[10px] text-amber-300">
+                        v{huntStatus.version}
+                      </span>
+                    )}
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  disabled={huntBusy}
+                  onClick={handleUpdateHuntExt}
+                  title="Baixar/atualizar .xpi oficial da loja Firefox"
+                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-200 inline-flex items-center gap-1 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${huntBusy ? "animate-spin" : ""}`} />
+                  {huntStatus.installed ? "Atualizar" : "Baixar"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </section>
+
+      {/* Auto-Updater Section */}
+      <UpdateSection serverTimeMs={serverTimeMs} />
     </div>
   );
 }

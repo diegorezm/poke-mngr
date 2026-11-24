@@ -34,6 +34,7 @@ import { PassView } from "./components/PassView";
 import { LivesView } from "./components/LivesView";
 import { ChatView } from "./components/ChatView";
 import { SettingsView } from "./components/SettingsView";
+import { UpdateBanner } from "./components/UpdateCard";
 
 type TabId =
   | "dashboard"
@@ -289,6 +290,9 @@ export function App() {
           </div>
         </header>
 
+        {/* Update Available Banner */}
+        <UpdateBanner />
+
         {/* Workspace Canvas */}
         <main className={tab === "deck" ? "flex-1 overflow-hidden p-0" : "flex-1 overflow-y-auto p-5"}>
           <TabErrorBoundary tabKey={tab}>
@@ -389,6 +393,7 @@ export function App() {
           {tab === "config" && (
             <SettingsView
               settings={settings}
+              serverTimeMs={snap.serverTimeMs}
               onSettingsChange={setSettings}
               onToast={showToast}
             />

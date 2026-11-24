@@ -16,6 +16,7 @@ export type {
     EquippedItem,
     EvoStep,
     EvolutionProjection,
+    HuntExtStatus,
     HuntInfo,
     HuntSpeciesInfo,
     HuntTelemetry,

@@ -1,0 +1,165 @@
+name: Release — PokeMngr
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão (ex.: 0.2.0) para dry-run"
+        required: false
+        default: "0.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Windows Desktop + NSIS Installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolver versão da Release
+        id: meta
+        shell: pwsh
+        run: |
+          $raw = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "${{ inputs.version }}" }
+          $ver = $raw.TrimStart('v')
+          if ($ver -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Tag/versão inválida: '$raw'. Use o formato vX.Y.Z (ex.: v0.2.0)."
+          }
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar Wails v3 CLI
+        shell: pwsh
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+
+      - name: Instalar NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          "${env:ProgramFiles(x86)}\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Sincronizar versão nos metadados Windows
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.meta.outputs.version }}"
+          $infoPath = "build/windows/info.json"
+          $info = Get-Content -Raw $infoPath | ConvertFrom-Json
+          $info.fixed.file_version = $ver
+          $info.info."0000".ProductVersion = $ver
+          $info | ConvertTo-Json -Depth 10 | Set-Content -Path $infoPath -Encoding UTF8
+
+      - name: Rodar testes Go
+        shell: pwsh
+        run: go test ./internal/...
+
+      - name: Compilar binário e instalador NSIS
+        shell: pwsh
+        run: |
+          wails3 task package INSTALL_SCOPE=user APP_VERSION=${{ steps.meta.outputs.version }} UPDATE_REPO=${{ github.repository }}
+
+      - name: Empacotar versão portátil (.zip)
+        shell: pwsh
+        run: |
+          Compress-Archive -Path bin/poke-mngr.exe -DestinationPath bin/poke-mngr-windows-amd64-portable.zip -Force
+
+      - name: Gerar SHA256SUMS.txt (Windows)
+        shell: pwsh
+        run: |
+          $files = @(
+            "bin/poke-mngr-amd64-installer.exe",
+            "bin/poke-mngr-windows-amd64-portable.zip"
+          )
+          $lines = foreach ($f in $files) {
+            $h = (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower()
+            "$h  $(Split-Path -Leaf $f)"
+          }
+          $lines | Set-Content -Path bin/SHA256SUMS-windows.txt -Encoding ASCII
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            bin/poke-mngr-amd64-installer.exe
+            bin/poke-mngr-windows-amd64-portable.zip
+            bin/SHA256SUMS-windows.txt
+
+  build-linux-server:
+    name: Linux Headless Server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolver versão da Release
+        id: meta
+        run: |
+          RAW="${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}"
+          VER="${RAW#v}"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Compilar servidor headless Linux (CGO_ENABLED=0)
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p bin
+          go build -trimpath -buildvcs=false \
+            -ldflags="-w -s -X poke-mngr/internal/updater.Version=${{ steps.meta.outputs.version }} -X poke-mngr/internal/updater.DefaultRepo=${{ github.repository }}" \
+            -o bin/poke-mngr-server-linux-amd64 ./cmd/server
+          (cd bin && sha256sum poke-mngr-server-linux-amd64 > SHA256SUMS-linux.txt)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: |
+            bin/poke-mngr-server-linux-amd64
+            bin/SHA256SUMS-linux.txt
+
+  publish:
+    name: Publicar GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [build-windows, build-linux-server]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Combinar SHA256SUMS.txt
+        run: |
+          mkdir -p release
+          cp dist/windows-release/poke-mngr-amd64-installer.exe release/
+          cp dist/windows-release/poke-mngr-windows-amd64-portable.zip release/
+          cp dist/linux-release/poke-mngr-server-linux-amd64 release/
+          cat dist/windows-release/SHA256SUMS-windows.txt dist/linux-release/SHA256SUMS-linux.txt > release/SHA256SUMS.txt
+          cat release/SHA256SUMS.txt
+
+      - name: Publicar na Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release/poke-mngr-amd64-installer.exe
+            release/poke-mngr-windows-amd64-portable.zip
+            release/poke-mngr-server-linux-amd64
+            release/SHA256SUMS.txt

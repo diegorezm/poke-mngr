@@ -20,6 +20,7 @@ Documento vivo de evolução do **PokeMngr** (Wails v3 · Go + React + TypeScrip
 - [x] **Servidor Headless VPS (Base):** pacote isolado (`internal/server` + `cmd/server`) compilando para Linux (`CGO_ENABLED=0`).
 - [x] **Polimento Desktop & Notificações (Nível 1):** ícone próprio (`build/appicon.png`, `icon.ico`, `icons.icns`, `icon.svg`), Autostart nativo do Windows (`app.Autostart`), toggles ao vivo de **ULTRA** e **Menos animações** na barra do Deck (via `postMessage` + `CSSMediaRule`), relatório diário automático (`dailyReportHour`/`reportTz`) + alertas de queda prolongada e retorno no Discord, e indicador de consumo de RAM (Go + processos filhos WebView2) no rodapé da sidebar.
 - [x] **Gameplay & Mercado Avançado (Nível 2 — #6 a #10):** Valoração do Inventário em Gemas/USD (itens raros + shinies + cotação da Gema), Gráficos SVG de Mercado (inflação, movers com sparklines e série histórica 7d/30d), Chat clicável (Ficha Pública `chat.verPokemon` → `ranking.ficha` e Anúncio de Mercado `market.anuncio` com compra direta), Ficha Pokémon completa (tabela de 40 evoluções ramificadas + projeção de evoluções finais + Poder PvP achatado de arena + Poder PvE + Alcance 1–4) e Sniper/Alertas de Mercado para Pokémon (`soShiny`, `soP5`, `soTmElemental`, `soTmAoe`, IV/Nível mín), gatilho por `%` abaixo da média 7d e alerta de venda de item raro acima da média (`+30%`).
+- [x] **Deck Avançado & Distribuição (Nível 2 — #11 e #12):** Eco de cliques opt-in entre contas no Deck (`postMessage` + replay por caminho/texto + aviso de botão ausente), extensão opcional `/hunt for PokeIdle` (download `.xpi` do AMO com cache local + ponte same-origin `/api/wishlist`), auto-updater via GitHub Releases com validação SHA-256 + instalador Windows NSIS PT-BR silencioso (`/S`) + workflow `.github/workflows/release.yml`.
 
 ---
 
@@ -39,7 +40,7 @@ Documento vivo de evolução do **PokeMngr** (Wails v3 · Go + React + TypeScrip
 
 ---
 
-### Nível 2 — Média
+### Nível 2 — Média — ✅ Concluído
 
 | # | Feature | Status | Dificuldade | Impacto | Origem | Escopo Técnico |
 |---|---|---|---|---|---|---|
@@ -48,8 +49,8 @@ Documento vivo de evolução do **PokeMngr** (Wails v3 · Go + React + TypeScrip
 | 8 | **Chat clicável (Ficha Pública + Anúncio de Mercado)** | ✅ | ★★★☆☆ (3/5) | Médio | `manager-online` | Implementar waiter WS para `chat.verPokemon` → `ranking.ficha` e `market.anuncio`; tornar nomes de Pokémon e anúncios clicáveis em `ChatView.tsx` abrindo o modal de Ficha ou Compra. |
 | 9 | **Ficha Pokémon completa (Evoluções ramificadas + Poder PvP/PvE)** | ✅ | ★★★☆☆ (3/5) | Médio | `manager-online` | Portar tabela de evoluções ramificadas (`evolucoes_ramificadas.py`) e cálculo exato de Poder PvP (achatamento de arena `150*(lv/150)^0.45`), Poder PvE e alcance no tabuleiro (1–4) em `calc.go` / `pvp_power.go`. |
 | 10 | **Sniper & Alertas de Mercado para Pokémon + % abaixo da média** | ✅ | ★★★☆☆ (3/5) | Alto | `manager-online` | Estender `MarketService.tickRules` para consultar `market.listar` com filtros (espécie, shiny, IV mín, nível mín, P5, Z-Move), gatilho por `%` abaixo da média 7d e alerta de venda de item raro acima da média (`+30%`). |
-| 11 | **Eco de cliques entre contas no Deck + Extensão `/hunt`** | ⏳ | ★★★☆☆ (3/5) | Médio | `pokeidleDeck` | Injetar `echo.js` no proxy local `/app` comunicando via `postMessage` com `DeckView.tsx` para replicar cliques entre iframes (opt-in); loader opcional do `.xpi` `/hunt for PokeIdle` com ponte para `/api/wishlist`. |
-| 12 | **Auto-updater + Instalador Windows (NSIS)** | ⏳ | ★★★☆☆ (3/5) | Médio | `manager-online` | Checar GitHub Releases, validar SHA-256 e disparar instalador NSIS silencioso via `Taskfile.yml` + GitHub Actions workflow. |
+| 11 | **Eco de cliques entre contas no Deck + Extensão `/hunt`** | ✅ | ★★★☆☆ (3/5) | Médio | `pokeidleDeck` | Injetar `echo.js` no proxy local `/app` comunicando via `postMessage` com `DeckView.tsx` para replicar cliques entre iframes (opt-in); loader opcional do `.xpi` `/hunt for PokeIdle` com ponte para `/api/wishlist`. |
+| 12 | **Auto-updater + Instalador Windows (NSIS)** | ✅ | ★★★☆☆ (3/5) | Médio | `manager-online` | Checar GitHub Releases, validar SHA-256 e disparar instalador NSIS silencioso via `Taskfile.yml` + GitHub Actions workflow. |
 
 ---
 
