@@ -1,59 +1,97 @@
-# Welcome to Your New Wails3 Project!
+# PokeMngr
 
-Congratulations on generating your Wails3 application! This README will guide you through the next steps to get your project up and running.
+Sua central de controle para jogar e gerenciar até **4 contas de PokéIdle** ao mesmo tempo — com visual limpo inspirado na Pokédex, tema claro e escuro, automações inteligentes, alertas no Discord e acompanhamento completo do seu progresso.
 
-## Getting Started
+---
 
-1. Navigate to your project directory in the terminal.
+## Por que usar o PokeMngr?
 
-2. To run your application in development mode, use the following command:
+Jogar PokéIdle em várias abas diferentes cansa rápido: fica difícil saber qual conta ficou sem poção, onde está rendendo mais ouro ou XP, se apareceu um Shiny ou se aquele item raro está caro no mercado.
 
-   ```
-   wails3 dev
-   ```
+O **PokeMngr** reúne tudo o que você precisa em um único aplicativo, respeitando o limite oficial de **até 4 contas** dos Termos de Uso do PokéIdle.
 
-   This will start your application and enable hot-reloading for both frontend and backend changes.
+---
 
-3. To build your application for production, use:
+## O que o PokeMngr faz por você
 
-   ```
-   wails3 build
-   ```
+### Painel Multi-Contas em Tempo Real
+Acompanhe todas as suas contas lado a lado, com clareza:
+- Nível, XP/hora, Ouro/hora, abates por hora e tempo de sessão;
+- Pokémon ativo (com barra de vida, nível e item equipado);
+- Estoque atual de poções e pokébolas;
+- Contagem de Shinies encontrados/capturados e drops raros da sessão;
+- Reconexão automática e pausa segura quando você entra no jogo por outro dispositivo.
 
-   This will create a production-ready executable in the `build` directory.
+### Automações que Economizam Tempo
+- **Auto-Catch:** arremessa pokébolas automaticamente seguindo a ordem de prioridade que você definir.
+- **Recompra Automática Inteligente:** mantém suas poções, pokébolas e revives sempre no nível ideal, escolhendo a melhor relação custo-benefício e respeitando um **piso mínimo de ouro** para nunca zerar sua conta.
+- **Troca de Hunt na Hora Certa:** quer mudar de área, mas o Pokémon ainda está em combate? O PokeMngr agenda a troca e muda sozinho assim que o tempo libera.
+- **Sugestão de Melhor Hunt:** descubra rapidamente quais áreas combinam melhor com o seu Pokémon ativo.
 
-## Exploring Wails3 Features
+### Deck Visual Integrado
+- Abra a tela oficial do PokéIdle direto pelo aplicativo — uma conta por vez ou todas juntas;
+- Ajuste o zoom, ative redução de animações ou modo de desempenho leve para consumir menos memória do computador;
+- Suporte opcional à extensão `/hunt` para quem gosta de usar os recursos extras da comunidade.
 
-Now that you have your project set up, it's time to explore the features that Wails3 offers:
+### Mapa, Mochila e PC Box Unificados
+- **Mapa & Hunts:** explore regiões e níveis de Outland, veja os Pokémon de cada local e mude de hunt com um clique.
+- **Inventário Unificado:** veja todos os itens, pokébolas, poções, itens raros e Pokémon de todas as suas contas em um único lugar.
+- **Ficha Completa do Pokémon:** clique em qualquer Pokémon para conferir atributos, IVs, ataques, evoluções e qualidade.
+- **Valoração Estimada:** calcule quanto vale o seu inventário (Gemas, itens raros e Shinies) com base nos preços recentes do mercado.
+- **Venda Rápida do Depósito:** venda os Pokémon sobrando direto pelo painel, com janela de confirmação segura.
 
-1. **Check out the examples**: The best way to learn is by example. Visit the `examples` directory in the `v3/examples` directory to see various sample applications.
+### Mercado, Gráficos e Sniper
+- Consulte itens e Pokémon à venda, filtre por brilho (Shiny), IV mínimo, nível, P5, Z-Move e ataques em área;
+- Acompanhe gráficos de preço médio dos últimos dias e salve seus itens favoritos;
+- Receba alertas quando um item raro que você possui estiver bem acima da média — ótimo momento para vender;
+- Configure **Alertas de Preço** ou **Sniper** com limite máximo por compra e orçamento diário por conta.
 
-2. **Run an example**: To run any of the examples, navigate to the example's directory and use:
+### Arena PvP, Passe de Batalha e Chat
+- **PvP:** monte sua equipe, acompanhe os rankings semanal e mensal e entre automaticamente na fila quando sua conta estiver pronta.
+- **Passe de Batalha:** veja a contagem regressiva do reset diário e resgate o Passe de todas as contas online com um único clique.
+- **Chat do Jogo:** acompanhe os canais do chat e envie mensagens sem precisar alternar entre várias janelas, com links clicáveis para fichas de Pokémon.
 
-   ```
-   go run .
-   ```
+### Central de Lives (Twitch e Kick)
+- Acompanhe os streamers oficiais e seus canais favoritos que estão ao vivo;
+- Organize os players por conta para não perder recompensas.
 
-   Note: Some examples may be under development during the alpha phase.
+### Alertas e Relatório Diário no Discord
+Conecte um aviso do Discord nos ajustes e receba notificações automáticas quando:
+- Um **Shiny** aparecer ou for capturado;
+- Cair um **drop raro** (Bronze Boss Token, Fragmento de Chave, Shiny Stone ou Bicicleta);
+- Uma conta ficar fora do ar ou voltar a conectar;
+- Chegar o horário do seu **Relatório Diário**, com o resumo de XP, Ouro, abates e itens raros de cada conta.
 
-3. **Explore the documentation**: Visit the [Wails3 documentation](https://v3.wails.io/) for in-depth guides and API references.
+### Prático no Dia a Dia
+- **Tema Claro e Escuro:** alterne entre o visual *Pokédex Red* (claro) e *Smoked Carbon* (escuro) quando quiser.
+- **Bandeja do Sistema e Início com o Windows:** feche a janela mantendo suas contas rodando discretamente perto do relógio.
+- **Atualizações Automáticas:** quando sair uma novidade, o próprio PokeMngr avisa e atualiza com um clique.
 
-4. **Join the community**: Have questions or want to share your progress? Join the [Wails Discord](https://discord.gg/JDdSxwjhGf) or visit the [Wails discussions on GitHub](https://github.com/wailsapp/wails/discussions).
+---
 
-## Project Structure
+## Como Começar
 
-Take a moment to familiarize yourself with your project structure:
+1. **Baixe o instalador** mais recente na aba **Releases** aqui no GitHub e conclua a instalação.
+2. Abra o **PokeMngr** e acesse a aba **Ajustes**.
+3. Clique em **Adicionar Conta** e siga o passo rápido exibido na tela para copiar os dados da sua sessão do PokéIdle.
+4. Ative as automações que desejar (Auto-Catch, Recompra Automática, alertas do Discord, etc.).
+5. Pronto! Volte ao **Painel** para acompanhar suas contas funcionando em tempo real.
 
-- `frontend/`: Contains your frontend code (HTML, CSS, JavaScript/TypeScript)
-- `main.go`: The entry point of your Go backend
-- `app.go`: Define your application structure and methods here
-- `wails.json`: Configuration file for your Wails project
+---
 
-## Next Steps
+## Dúvidas Rápidas
 
-1. Modify the frontend in the `frontend/` directory to create your desired UI.
-2. Add backend functionality in `main.go`.
-3. Use `wails3 dev` to see your changes in real-time.
-4. When ready, build your application with `wails3 build`.
+**Quantas contas posso conectar?**
+Até **4 contas simultâneas**, seguindo o limite permitido pelos Termos de Uso do PokéIdle.
 
-Happy coding with Wails3! If you encounter any issues or have questions, don't hesitate to consult the documentation or reach out to the Wails community.
+**Meus dados ficam salvos onde?**
+Tudo fica salvo localmente no seu próprio computador. Suas credenciais de acesso nunca são enviadas para terceiros.
+
+**Posso usar proxy individual por conta?**
+Sim! Nos ajustes de cada conta você pode configurar um proxy separado e testar a conexão antes de salvar.
+
+---
+
+## Aviso
+
+O **PokeMngr** é um projeto independente feito pela comunidade para facilitar a vida de quem joga PokéIdle. Ele não possui vínculo oficial com os criadores do PokéIdle nem com a The Pokémon Company.
