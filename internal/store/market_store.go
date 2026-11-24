@@ -1,0 +1,181 @@
+package store
+
+import (
+	"encoding/json"
+	"time"
+)
+
+type MarketRuleSpec struct {
+	Target      string `json:"target"`                // "item" | "pokemon"
+	ItemID      int    `json:"itemId,omitempty"`
+	ItemName    string `json:"itemName,omitempty"`
+	Query       string `json:"query,omitempty"`       // pokemon search
+	Moeda       string `json:"moeda"`                 // "gold" | "orb"
+	MaxPrice    int64  `json:"maxPrice"`
+	MaxPctBelow float64 `json:"maxPctBelow,omitempty"` // alert when X% below 7d avg
+	OnlyShiny   bool   `json:"onlyShiny,omitempty"`
+	MinIV       int    `json:"minIv,omitempty"`
+	MinLevel    int    `json:"minLevel,omitempty"`
+	DailyBudget int64  `json:"dailyBudget,omitempty"` // per account per day
+	AccountIDs  []int  `json:"accountIds,omitempty"`
+}
+
+type MarketRule struct {
+	ID        int            `json:"id"`
+	Kind      string         `json:"kind"` // "alert" | "snipe"
+	Enabled   bool           `json:"enabled"`
+	Spec      MarketRuleSpec `json:"spec"`
+	Spent     int64          `json:"spent"`
+	SpentDay  string         `json:"spentDay"`
+	LastFire  int64          `json:"lastFire"`
+	CreatedAt int64          `json:"createdAt"`
+}
+
+type MarketLogEntry struct {
+	ID        int    `json:"id"`
+	TS        int64  `json:"ts"`
+	AccountID int    `json:"accountId"`
+	RuleID    int    `json:"ruleId"`
+	Status    string `json:"status"`
+	Text      string `json:"text"`
+}
+
+func (s *Store) ListMarketRules() ([]MarketRule, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`
+		SELECT id, kind, enabled, spec_json, spent, spent_day, last_fire, created_at
+		FROM market_rules
+		ORDER BY id DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MarketRule
+	for rows.Next() {
+		var r MarketRule
+		var enabled int
+		var specJSON string
+		if err := rows.Scan(&r.ID, &r.Kind, &enabled, &specJSON, &r.Spent, &r.SpentDay, &r.LastFire, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		r.Enabled = enabled != 0
+		_ = json.Unmarshal([]byte(specJSON), &r.Spec)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SaveMarketRule(r MarketRule) (MarketRule, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b, err := json.Marshal(r.Spec)
+	if err != nil {
+		return r, err
+	}
+	en := 0
+	if r.Enabled {
+		en = 1
+	}
+	if r.ID == 0 {
+		r.CreatedAt = time.Now().Unix()
+		res, err := s.db.Exec(`
+			INSERT INTO market_rules(kind, enabled, spec_json, spent, spent_day, last_fire, created_at)
+			VALUES (?, ?, ?, 0, '', 0, ?)
+		`, r.Kind, en, string(b), r.CreatedAt)
+		if err != nil {
+			return r, err
+		}
+		id, _ := res.LastInsertId()
+		r.ID = int(id)
+		return r, nil
+	}
+	_, err = s.db.Exec(`
+		UPDATE market_rules SET kind = ?, enabled = ?, spec_json = ? WHERE id = ?
+	`, r.Kind, en, string(b), r.ID)
+	return r, err
+}
+
+func (s *Store) ToggleMarketRule(id int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var en int
+	if err := s.db.QueryRow(`SELECT enabled FROM market_rules WHERE id = ?`, id).Scan(&en); err != nil {
+		return false, err
+	}
+	next := 1
+	if en != 0 {
+		next = 0
+	}
+	_, err := s.db.Exec(`UPDATE market_rules SET enabled = ? WHERE id = ?`, next, id)
+	return next != 0, err
+}
+
+func (s *Store) DeleteMarketRule(id int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`DELETE FROM market_rules WHERE id = ?`, id)
+	return err
+}
+
+func (s *Store) GetRuleDailySpend(ruleID, accountID int, day string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var spent int64
+	_ = s.db.QueryRow(`SELECT spent FROM market_rule_spend WHERE rule_id = ? AND account_id = ? AND day = ?`,
+		ruleID, accountID, day).Scan(&spent)
+	return spent
+}
+
+func (s *Store) AddRuleDailySpend(ruleID, accountID int, day string, delta int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`
+		INSERT INTO market_rule_spend(rule_id, account_id, day, spent)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(rule_id, account_id, day) DO UPDATE SET spent = spent + excluded.spent
+	`, ruleID, accountID, day, delta)
+	if err != nil {
+		return err
+	}
+	_, _ = s.db.Exec(`UPDATE market_rules SET last_fire = ?, spent = spent + ?, spent_day = ? WHERE id = ?`,
+		time.Now().Unix(), delta, day, ruleID)
+	return nil
+}
+
+func (s *Store) AppendMarketLog(accountID, ruleID int, status, text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`
+		INSERT INTO market_log(ts, account_id, rule_id, status, text)
+		VALUES (?, ?, ?, ?, ?)
+	`, time.Now().Unix(), accountID, ruleID, status, text)
+	if err != nil {
+		return err
+	}
+	_, _ = s.db.Exec(`DELETE FROM market_log WHERE id NOT IN (SELECT id FROM market_log ORDER BY id DESC LIMIT 300)`)
+	return nil
+}
+
+func (s *Store) ListMarketLog(limit int) ([]MarketLogEntry, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`SELECT id, ts, account_id, rule_id, status, text FROM market_log ORDER BY id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MarketLogEntry
+	for rows.Next() {
+		var e MarketLogEntry
+		if err := rows.Scan(&e.ID, &e.TS, &e.AccountID, &e.RuleID, &e.Status, &e.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
