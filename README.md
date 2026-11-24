@@ -95,3 +95,7 @@ Sim! Nos ajustes de cada conta você pode configurar um proxy separado e testar 
 ## Aviso
 
 O **PokeMngr** é um projeto independente feito pela comunidade para facilitar a vida de quem joga PokéIdle. Ele não possui vínculo oficial com os criadores do PokéIdle nem com a The Pokémon Company.
+
+## Licença
+
+Distribuído sob a licença **GNU General Public License v3.0 (GPL-3.0)**. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.

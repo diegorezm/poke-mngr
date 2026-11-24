@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Versão (ex.: 0.2.0) para dry-run"
+        description: "Versão (ex.: 1.0.0) para dry-run"
         required: false
-        default: "0.1.0"
+        default: "1.0.0"
 
 permissions:
   contents: write
@@ -60,12 +60,16 @@ jobs:
           $infoPath = "build/windows/info.json"
           $info = Get-Content -Raw $infoPath | ConvertFrom-Json
           $info.fixed.file_version = $ver
-          $info.info."0000".ProductVersion = $ver
+          foreach ($loc in $info.info.PSObject.Properties) {
+            $loc.Value.ProductVersion = $ver
+          }
           $info | ConvertTo-Json -Depth 10 | Set-Content -Path $infoPath -Encoding UTF8
 
       - name: Rodar testes Go
         shell: pwsh
-        run: go test ./internal/...
+        env:
+          CGO_ENABLED: "0"
+        run: go test -count=1 ./internal/...
 
       - name: Compilar binário e instalador NSIS
         shell: pwsh
