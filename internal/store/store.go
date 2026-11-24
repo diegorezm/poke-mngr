@@ -22,7 +22,7 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -220,16 +220,44 @@ func (s *Store) ListAccounts() ([]config.AccountRecord, error) {
 }
 
 func (s *Store) GetAccount(id int) (*config.AccountRecord, error) {
-	list, err := s.ListAccounts()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var a config.AccountRecord
+	var enabled int
+	var pScheme, pHost, pUser, pPass, optsJSON string
+	var pPort int
+	err := s.db.QueryRow(`
+		SELECT id, uuid, nick, token, device_id, enabled, order_index,
+		       proxy_scheme, proxy_host, proxy_port, proxy_user, proxy_pass,
+		       opts_json, token_status, token_detail, created_at
+		FROM accounts
+		WHERE id = ?
+	`, id).Scan(
+		&a.ID, &a.UUID, &a.Nick, &a.Token, &a.DeviceID, &enabled, &a.OrderIndex,
+		&pScheme, &pHost, &pPort, &pUser, &pPass,
+		&optsJSON, &a.TokenStatus, &a.TokenDetail, &a.CreatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
-	for i := range list {
-		if list[i].ID == id {
-			return &list[i], nil
+	a.Enabled = enabled != 0
+	if strings.TrimSpace(pHost) != "" && pPort > 0 {
+		a.Proxy = &config.ProxyConfig{
+			Scheme:   pScheme,
+			Host:     pHost,
+			Port:     pPort,
+			Username: pUser,
+			Password: pPass,
 		}
 	}
-	return nil, sql.ErrNoRows
+	a.Options = config.DefaultAccountOptions()
+	if optsJSON != "" && optsJSON != "{}" {
+		_ = json.Unmarshal([]byte(optsJSON), &a.Options)
+	}
+	if len(a.Options.BallPriority) == 0 {
+		a.Options.BallPriority = append([]int(nil), config.DefaultBallPriority...)
+	}
+	return &a, nil
 }
 
 func (s *Store) AddAccount(acc config.AccountRecord) (config.AccountRecord, error) {

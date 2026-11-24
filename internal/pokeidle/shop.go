@@ -161,6 +161,16 @@ func (sm *ShopManager) BeginSell() (<-chan SellResult, error) {
 	return ch, nil
 }
 
+// CancelSell clears pendingSell only if it matches the caller's channel,
+// without clobbering unrelated buy-confirmation state.
+func (sm *ShopManager) CancelSell(ch <-chan SellResult) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if sm.pendingSell != nil && sm.pendingSell == ch {
+		sm.pendingSell = nil
+	}
+}
+
 type RestockOrder struct {
 	Kind string
 	ID   int

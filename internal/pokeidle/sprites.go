@@ -93,6 +93,8 @@ func fullAssetURL(rel string) string {
 // ItemCatalog caches /assets/items.json + /assets/items-icons.json for names, icons, and NPC prices.
 type ItemCatalog struct {
 	mu      sync.RWMutex
+	loadMu  sync.Mutex
+	client  *http.Client
 	potions []ShopItemMeta
 	revives []ShopItemMeta
 	byID    map[int]ShopItemMeta
@@ -102,6 +104,7 @@ type ItemCatalog struct {
 
 func NewItemCatalog() *ItemCatalog {
 	ic := &ItemCatalog{
+		client:  &http.Client{Timeout: 15 * time.Second},
 		potions: append([]ShopItemMeta(nil), DefaultNPCPotions...),
 		byID:    map[int]ShopItemMeta{},
 		display: map[int]ItemDisplayMeta{},
@@ -129,13 +132,22 @@ func (ic *ItemCatalog) EnsureLoaded(ctx context.Context) {
 		return
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	ic.loadMu.Lock()
+	defer ic.loadMu.Unlock()
+
+	ic.mu.RLock()
+	fresh = time.Since(ic.loaded) < 6*time.Hour && !ic.loaded.IsZero()
+	ic.mu.RUnlock()
+	if fresh {
+		return
+	}
+
 	fetchJSON := func(path string) any {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, config.SiteOrigin+path, nil)
 		if err != nil {
 			return nil
 		}
-		resp, err := client.Do(req)
+		resp, err := ic.client.Do(req)
 		if err != nil {
 			return nil
 		}
@@ -402,6 +414,8 @@ var outlandPrefixes = []string{
 
 type CreatureCatalog struct {
 	mu     sync.RWMutex
+	loadMu sync.Mutex
+	client *http.Client
 	byID   map[int]CreatureMeta
 	byName map[string]CreatureMeta
 	loaded time.Time
@@ -409,6 +423,7 @@ type CreatureCatalog struct {
 
 func NewCreatureCatalog() *CreatureCatalog {
 	return &CreatureCatalog{
+		client: &http.Client{Timeout: 20 * time.Second},
 		byID:   map[int]CreatureMeta{},
 		byName: map[string]CreatureMeta{},
 	}
@@ -422,6 +437,16 @@ func (cc *CreatureCatalog) EnsureLoaded(ctx context.Context) {
 		return
 	}
 
+	cc.loadMu.Lock()
+	defer cc.loadMu.Unlock()
+
+	cc.mu.RLock()
+	fresh = time.Since(cc.loaded) < 6*time.Hour && !cc.loaded.IsZero()
+	cc.mu.RUnlock()
+	if fresh {
+		return
+	}
+
 	files := []string{
 		"/assets/creatures.json",
 		"/assets/creatures-novos.json",
@@ -429,7 +454,6 @@ func (cc *CreatureCatalog) EnsureLoaded(ctx context.Context) {
 		"/assets/creatures-formas.json",
 		"/assets/creatures-sprites-lab.json",
 	}
-	client := &http.Client{Timeout: 20 * time.Second}
 	results := make([]map[string]any, len(files))
 	var wg sync.WaitGroup
 	for i, path := range files {
@@ -440,7 +464,7 @@ func (cc *CreatureCatalog) EnsureLoaded(ctx context.Context) {
 			if err != nil {
 				return
 			}
-			resp, err := client.Do(req)
+			resp, err := cc.client.Do(req)
 			if err != nil {
 				return
 			}
@@ -732,6 +756,12 @@ func (sp *SpriteProxy) loadOutfitIndex(ctx context.Context) (map[string]map[stri
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		if sp.idx != nil {
+			return sp.idx, nil
+		}
+		return nil, fmt.Errorf("outfits-index HTTP %d", resp.StatusCode)
+	}
 	var parsed map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return nil, err

@@ -597,15 +597,7 @@ func (s *AppService) SavePvpTeam(accountID int, pokemonIDs []int, houses map[str
 }
 
 func (s *AppService) GetPvpLadder(accountID, page int) (map[string]any, error) {
-	conn := s.mgr.GetConnection(accountID)
-	if conn == nil {
-		for _, a := range s.mgr.Snapshot().Accounts {
-			if a.State == pokeidle.StateOnline {
-				conn = s.mgr.GetConnection(a.ID)
-				break
-			}
-		}
-	}
+	conn := s.mgr.PickOnlineConnection(accountID)
 	if conn == nil {
 		return nil, fmt.Errorf("nenhuma conta online")
 	}
@@ -613,15 +605,7 @@ func (s *AppService) GetPvpLadder(accountID, page int) (map[string]any, error) {
 }
 
 func (s *AppService) GetPvpMonthly(accountID, page int) (map[string]any, error) {
-	conn := s.mgr.GetConnection(accountID)
-	if conn == nil {
-		for _, a := range s.mgr.Snapshot().Accounts {
-			if a.State == pokeidle.StateOnline {
-				conn = s.mgr.GetConnection(a.ID)
-				break
-			}
-		}
-	}
+	conn := s.mgr.PickOnlineConnection(accountID)
 	if conn == nil {
 		return nil, fmt.Errorf("nenhuma conta online")
 	}

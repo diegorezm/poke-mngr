@@ -548,19 +548,7 @@ func SellPremium(floor, avg float64, sold int, minPct float64) (float64, bool) {
 }
 
 func (ms *MarketService) pickOnlineConn(preferredID int) *AccountConnection {
-	if preferredID > 0 {
-		if c := ms.mgr.GetConnection(preferredID); c != nil && c.Snapshot().State == StateOnline {
-			return c
-		}
-	}
-	ms.mgr.mu.RLock()
-	defer ms.mgr.mu.RUnlock()
-	for _, c := range ms.mgr.conns {
-		if c.Snapshot().State == StateOnline {
-			return c
-		}
-	}
-	return nil
+	return ms.mgr.PickOnlineConnection(preferredID)
 }
 
 func (ms *MarketService) Overview(ctx context.Context) (map[string]any, error) {
@@ -1104,14 +1092,49 @@ func (ms *MarketService) Valuation(ctx context.Context, accountID int) (*Invento
 // RunRuleLoop checks Alert & Sniper rules every 6 seconds and rare-item sell alerts every 2 minutes.
 func (ms *MarketService) RunRuleLoop(ctx context.Context) {
 	ticker := time.NewTicker(6 * time.Second)
+	pruneTicker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
+	defer pruneTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-pruneTicker.C:
+			ms.pruneCaches(time.Now())
 		case <-ticker.C:
 			ms.tickSellAlerts(ctx)
 			ms.tickRules(ctx)
+		}
+	}
+}
+
+func (ms *MarketService) pruneCaches(now time.Time) {
+	const dedupeTTL = 24 * time.Hour
+	ms.cacheMu.Lock()
+	defer ms.cacheMu.Unlock()
+	for k, e := range ms.guideCache {
+		if !now.Before(e.exp) {
+			delete(ms.guideCache, k)
+		}
+	}
+	for k, e := range ms.shinyCache {
+		if !now.Before(e.exp) {
+			delete(ms.shinyCache, k)
+		}
+	}
+	for k, at := range ms.seenAlerted {
+		if now.Sub(at) > dedupeTTL {
+			delete(ms.seenAlerted, k)
+		}
+	}
+	for id, at := range ms.snipedIDs {
+		if now.Sub(at) > dedupeTTL {
+			delete(ms.snipedIDs, id)
+		}
+	}
+	for k, e := range ms.sellAlerted {
+		if now.Sub(e.at) > dedupeTTL {
+			delete(ms.sellAlerted, k)
 		}
 	}
 }
@@ -1412,7 +1435,7 @@ func (ms *MarketService) tickRules(ctx context.Context) {
 
 			for _, accID := range targetIDs {
 				c := ms.mgr.GetConnection(accID)
-				if c == nil || c.Snapshot().State != StateOnline {
+				if c == nil || !c.IsOnline() {
 					continue
 				}
 				spent := ms.store.GetRuleDailySpend(rule.ID, accID, today)

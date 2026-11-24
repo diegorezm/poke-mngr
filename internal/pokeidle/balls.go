@@ -35,6 +35,22 @@ func (bm *BallManager) Reset() {
 	bm.pending = map[int]bool{}
 }
 
+func (bm *BallManager) SetPriority(priority []int) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	if len(priority) == 0 {
+		bm.BallPriority = append([]int(nil), config.DefaultBallPriority...)
+		return
+	}
+	bm.BallPriority = append([]int(nil), priority...)
+}
+
+func (bm *BallManager) Stats() (caught, failed int) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	return bm.Caught, bm.Failed
+}
+
 func (bm *BallManager) HandleBattleEvent(ev map[string]any) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()

@@ -218,12 +218,20 @@ func (lm *Manager) State() CentralState {
 
 	accs, _ := lm.st.ListAccounts()
 	lm.mu.RLock()
-	extraLive := lm.extraLive
-	activePlayer := lm.activePlayer
+	extraLive := make(map[string]bool, len(lm.extraLive))
+	for k, v := range lm.extraLive {
+		extraLive[k] = v
+	}
+	activePlayer := make(map[string]string, len(lm.activePlayer))
+	for k, v := range lm.activePlayer {
+		activePlayer[k] = v
+	}
 	lm.mu.RUnlock()
 
-	for _, a := range accs {
+	cfgs := make([]store.LivesAccountConfig, len(accs))
+	for i, a := range accs {
 		cfg := lm.st.LoadLivesConfig(a.ID)
+		cfgs[i] = cfg
 		for _, ch := range cfg.ExtraTwitch {
 			c := strings.ToLower(strings.TrimSpace(ch))
 			if c != "" {
@@ -238,9 +246,9 @@ func (lm *Manager) State() CentralState {
 		}
 	}
 
-	accStates := []AccountLivesState{}
-	for _, a := range accs {
-		cfg := lm.st.LoadLivesConfig(a.ID)
+	accStates := make([]AccountLivesState, 0, len(accs))
+	for i, a := range accs {
+		cfg := cfgs[i]
 		slots := assignSlots(a.ID, cfg, channels, activePlayer)
 		accStates = append(accStates, AccountLivesState{
 			AccountID: a.ID,

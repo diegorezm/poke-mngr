@@ -160,7 +160,7 @@ func (hm *HuntManager) applyPkFora(ids []any) {
 	hm.Estado["pokemons"] = filtered
 }
 
-func (hm *HuntManager) HandleBattleEvent(ev map[string]any) {
+func (hm *HuntManager) HandleBattleEvent(ev map[string]any) (killXP, killGold int64, killed bool) {
 	kind := asString(ev["k"])
 	switch kind {
 	case "hunt":
@@ -195,8 +195,10 @@ func (hm *HuntManager) HandleBattleEvent(ev map[string]any) {
 			if hm.OnKill != nil {
 				hm.OnKill(xp, gold)
 			}
+			return xp, gold, true
 		}
 	}
+	return 0, 0, false
 }
 
 func (hm *HuntManager) ActivePokemon() map[string]any {

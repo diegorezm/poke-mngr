@@ -152,6 +152,7 @@ func ProbeExitIP(ctx context.Context, proxyCfg *config.ProxyConfig) (string, err
 	if err != nil {
 		return "", err
 	}
+	defer client.CloseIdleConnections()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.ipify.org", nil)
 	if err != nil {
 		return "", err

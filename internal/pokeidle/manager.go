@@ -91,9 +91,11 @@ func (m *AccountManager) Start(parent context.Context) error {
 	if err != nil {
 		return err
 	}
+	m.mu.Lock()
 	for _, acc := range accounts {
 		m.spawnLocked(acc)
 	}
+	m.mu.Unlock()
 
 	go m.telemetryLoop(ctx)
 	return nil
@@ -214,6 +216,28 @@ func (m *AccountManager) GetConnection(id int) *AccountConnection {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.conns[id]
+}
+
+// PickOnlineConnection returns the preferred connection if it is online,
+// otherwise the first online connection found (without taking Snapshot under m.mu).
+func (m *AccountManager) PickOnlineConnection(preferredID int) *AccountConnection {
+	if preferredID > 0 {
+		if c := m.GetConnection(preferredID); c != nil && c.IsOnline() {
+			return c
+		}
+	}
+	m.mu.RLock()
+	conns := make([]*AccountConnection, 0, len(m.conns))
+	for _, c := range m.conns {
+		conns = append(conns, c)
+	}
+	m.mu.RUnlock()
+	for _, c := range conns {
+		if c.IsOnline() {
+			return c
+		}
+	}
+	return nil
 }
 
 func (m *AccountManager) ListAccountsRedacted() ([]config.AccountRecord, error) {

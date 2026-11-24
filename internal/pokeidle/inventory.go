@@ -94,8 +94,11 @@ func (m *AccountManager) BuildInventory(accountID int) InventorySummary {
 	for _, c := range conns {
 		c.mu.RLock()
 		acc := c.acc
-		est := c.hunt.Estado
-		itensNossos := c.itensNossos
+		est := deepCloneMap(c.hunt.Estado)
+		itensNossos := make(map[int]map[string]any, len(c.itensNossos))
+		for k, v := range c.itensNossos {
+			itensNossos[k] = v
+		}
 		c.mu.RUnlock()
 
 		sum.TotalGold += asInt64(est["gold"])
@@ -299,14 +302,13 @@ func (m *AccountManager) BuildHuntsCatalog(accountID int) HuntsCatalog {
 		conn = m.GetConnection(accountID)
 	}
 	if conn == nil {
+		conn = m.PickOnlineConnection(0)
+	}
+	if conn == nil {
 		m.mu.RLock()
 		for _, c := range m.conns {
-			if conn == nil || c.Snapshot().State == StateOnline {
-				conn = c
-				if c.Snapshot().State == StateOnline {
-					break
-				}
-			}
+			conn = c
+			break
 		}
 		m.mu.RUnlock()
 	}

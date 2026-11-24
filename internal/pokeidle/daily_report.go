@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	_ "time/tzdata"
 
@@ -13,7 +14,11 @@ import (
 
 const dailyPeriodSettingKey = "daily_current_period"
 
-var defaultBrazilTZ = time.FixedZone("America/Sao_Paulo", -3*3600)
+var (
+	defaultBrazilTZ = time.FixedZone("America/Sao_Paulo", -3*3600)
+	reportLocMu     sync.RWMutex
+	reportLocCache  = map[string]*time.Location{}
+)
 
 // LoadReportLocation resolves an IANA timezone name (embedded via time/tzdata) with UTC-3 fallback.
 func LoadReportLocation(tzName string) *time.Location {
@@ -21,10 +26,21 @@ func LoadReportLocation(tzName string) *time.Location {
 	if name == "" {
 		name = "America/Sao_Paulo"
 	}
-	if loc, err := time.LoadLocation(name); err == nil {
+	reportLocMu.RLock()
+	if loc, ok := reportLocCache[name]; ok {
+		reportLocMu.RUnlock()
 		return loc
 	}
-	return defaultBrazilTZ
+	reportLocMu.RUnlock()
+
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		loc = defaultBrazilTZ
+	}
+	reportLocMu.Lock()
+	reportLocCache[name] = loc
+	reportLocMu.Unlock()
+	return loc
 }
 
 // CurrentDailyPeriod computes the logical reporting date (YYYY-MM-DD) shifted by reportHour in tzName.

@@ -298,7 +298,10 @@ func (pm *PvpManager) handlePvpFrame(ctx context.Context, msg map[string]any) {
 	pm.mu.Unlock()
 
 	if saveCh != nil {
-		saveCh <- *saveResult
+		select {
+		case saveCh <- *saveResult:
+		default:
+		}
 	}
 	if ackMatchID != nil {
 		go func() {
@@ -338,6 +341,13 @@ func (pm *PvpManager) SaveTeam(ctx context.Context, pokemonIDs []int, houses map
 	pm.mu.Lock()
 	pm.saveCh = ch
 	pm.mu.Unlock()
+	defer func() {
+		pm.mu.Lock()
+		if pm.saveCh == ch {
+			pm.saveCh = nil
+		}
+		pm.mu.Unlock()
+	}()
 
 	if err := pm.sendFn(ctx, map[string]any{
 		"t":          "pvp.time.salvar",
@@ -364,6 +374,13 @@ func (pm *PvpManager) RequestLadder(ctx context.Context, page int) (map[string]a
 	pm.mu.Lock()
 	pm.ladderCh = ch
 	pm.mu.Unlock()
+	defer func() {
+		pm.mu.Lock()
+		if pm.ladderCh == ch {
+			pm.ladderCh = nil
+		}
+		pm.mu.Unlock()
+	}()
 	if err := pm.sendFn(ctx, map[string]any{"t": "pvp.tabela", "pagina": page}); err != nil {
 		return nil, err
 	}
@@ -385,6 +402,13 @@ func (pm *PvpManager) RequestMonthly(ctx context.Context, page int) (map[string]
 	pm.mu.Lock()
 	pm.monthlyCh = ch
 	pm.mu.Unlock()
+	defer func() {
+		pm.mu.Lock()
+		if pm.monthlyCh == ch {
+			pm.monthlyCh = nil
+		}
+		pm.mu.Unlock()
+	}()
 	if err := pm.sendFn(ctx, map[string]any{"t": "pvp.mensal", "pagina": page}); err != nil {
 		return nil, err
 	}

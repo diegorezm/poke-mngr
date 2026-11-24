@@ -139,10 +139,6 @@ func NewAccountConnection(
 		ac.shinies = NewShinyTracker(0, 0)
 	}
 
-	ac.hunt.OnKill = func(xp, gold int64) {
-		period := ac.currentDailyPeriod()
-		_ = ac.store.AddDailyKill(period, ac.acc.Nick, xp, gold)
-	}
 	ac.market = NewMarketClient(acc.Name(), ac.sendJSON)
 	ac.pvp = NewPvpManager(acc.Name(), acc.Options.PvpAuto, ac.sendJSON)
 
@@ -163,10 +159,15 @@ func (ac *AccountConnection) Stop() {
 	ac.cancelDownTimerLocked()
 	cancel := ac.cancel
 	ac.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	if cancel == nil {
+		return
 	}
-	<-ac.done
+	cancel()
+	select {
+	case <-ac.done:
+	case <-time.After(5 * time.Second):
+		log.Printf("[%s] timeout aguardando encerramento da conexão", ac.acc.Name())
+	}
 }
 
 func (ac *AccountConnection) UpdateSettings(gs config.GlobalSettings) {
@@ -177,14 +178,6 @@ func (ac *AccountConnection) UpdateSettings(gs config.GlobalSettings) {
 	ac.reportHour = gs.DailyReportHour
 	ac.reportTZ = gs.ReportTZ
 	ac.mu.Unlock()
-}
-
-func (ac *AccountConnection) currentDailyPeriod() string {
-	ac.mu.RLock()
-	h := ac.reportHour
-	tz := ac.reportTZ
-	ac.mu.RUnlock()
-	return CurrentDailyPeriod(time.Now(), h, tz)
 }
 
 func (ac *AccountConnection) cancelDownTimerLocked() {
@@ -260,7 +253,7 @@ func (ac *AccountConnection) fireDownAlert() {
 func (ac *AccountConnection) UpdateOptions(opts config.AccountOptions) {
 	ac.mu.Lock()
 	ac.acc.Options = opts
-	ac.balls.BallPriority = opts.BallPriority
+	ac.balls.SetPriority(opts.BallPriority)
 	ac.pvp.SetAuto(opts.PvpAuto)
 	ac.mu.Unlock()
 }
@@ -277,6 +270,13 @@ func (ac *AccountConnection) Account() config.AccountRecord {
 	ac.mu.RLock()
 	defer ac.mu.RUnlock()
 	return ac.acc
+}
+
+func (ac *AccountConnection) IsOnline() bool {
+	ac.mu.RLock()
+	online := ac.state == StateOnline
+	ac.mu.RUnlock()
+	return online
 }
 
 func (ac *AccountConnection) ServerNowMs() int64 {
@@ -503,6 +503,7 @@ func (ac *AccountConnection) connectOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer httpClient.CloseIdleConnections()
 	dialCtx, dialCancel := context.WithTimeout(ctx, 20*time.Second)
 	ws, resp, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
 		HTTPClient: httpClient,
@@ -523,7 +524,11 @@ func (ac *AccountConnection) connectOnce(ctx context.Context) error {
 		ac.wsMu.Lock()
 		ac.ws = nil
 		ac.wsMu.Unlock()
-		_ = ws.Close(websocket.StatusNormalClosure, "bye")
+		if ctx.Err() != nil {
+			_ = ws.CloseNow()
+		} else {
+			_ = ws.Close(websocket.StatusNormalClosure, "bye")
+		}
 		ac.balls.Reset()
 		ac.shop.Reset()
 		ac.market.Reset("conta offline")
@@ -577,6 +582,7 @@ func (ac *AccountConnection) connectOnce(ctx context.Context) error {
 	defer sessCancel()
 
 	var recoveryAlert *DiscordEmbed
+	var sessionSnap *store.SessionSnapshot
 	ac.mu.Lock()
 	ac.state = StateOnline
 	ac.block = nil
@@ -586,7 +592,8 @@ func (ac *AccountConnection) connectOnce(ctx context.Context) error {
 	ac.lastFrameAt = time.Now()
 	if ac.sessionStart == 0 {
 		ac.sessionStart = time.Now().Unix()
-		ac.saveSessionLocked()
+		snap := ac.sessionSnapshotLocked()
+		sessionSnap = &snap
 	}
 	ac.cancelDownTimerLocked()
 	if ac.downAlerted && !ac.downSince.IsZero() {
@@ -605,6 +612,9 @@ func (ac *AccountConnection) connectOnce(ctx context.Context) error {
 	ac.downAlerted = false
 	ac.downReason = ""
 	ac.mu.Unlock()
+	if sessionSnap != nil {
+		_ = ac.store.SaveSessionState(acc.ID, *sessionSnap)
+	}
 	if recoveryAlert != nil {
 		ac.notifier.Send(*recoveryAlert)
 	}
@@ -612,7 +622,10 @@ func (ac *AccountConnection) connectOnce(ctx context.Context) error {
 	ac.emitChange()
 
 	// If configured huntSlug differs, select it
-	if acc.Options.HuntSlug != "" && acc.Options.HuntSlug != asString(ac.hunt.Estado["huntSlug"]) {
+	ac.mu.RLock()
+	currentHuntSlug := asString(ac.hunt.Estado["huntSlug"])
+	ac.mu.RUnlock()
+	if acc.Options.HuntSlug != "" && acc.Options.HuntSlug != currentHuntSlug {
 		_ = ac.SelectHunt(sessCtx, acc.Options.HuntSlug)
 	}
 
@@ -704,6 +717,13 @@ func (ac *AccountConnection) handleFrame(ctx context.Context, msg map[string]any
 		if patch == nil {
 			return nil
 		}
+		var (
+			sessionSnap *store.SessionSnapshot
+			accID       int
+			nick        string
+			reportHour  int
+			reportTZ    string
+		)
 		ac.mu.Lock()
 		if srvNow := asInt64(patch["servidorAgora"]); srvNow > 0 {
 			ac.serverOffset = srvNow - time.Now().UnixMilli()
@@ -713,9 +733,21 @@ func (ac *AccountConnection) handleFrame(ctx context.Context, msg map[string]any
 		ac.pvp.HandleEstado(patch)
 		deltas := ac.session.Update(ac.hunt.Estado)
 		if len(deltas) > 0 {
-			ac.saveSessionLocked()
-			nick := ac.acc.Nick
-			period := CurrentDailyPeriod(time.Now(), ac.reportHour, ac.reportTZ)
+			snap := ac.sessionSnapshotLocked()
+			sessionSnap = &snap
+			accID = ac.acc.ID
+			nick = ac.acc.Nick
+			reportHour = ac.reportHour
+			reportTZ = ac.reportTZ
+		}
+		if ac.official != nil && (patch["twitch"] != nil || patch["kick"] != nil) {
+			ac.official.UpdateFromEstado(ac.hunt.Estado)
+		}
+		ac.mu.Unlock()
+
+		if sessionSnap != nil {
+			_ = ac.store.SaveSessionState(accID, *sessionSnap)
+			period := CurrentDailyPeriod(time.Now(), reportHour, reportTZ)
 			for k, d := range deltas {
 				_ = ac.store.AddDailyRareItem(period, nick, k, d)
 				ac.notifier.Send(DiscordEmbed{
@@ -725,10 +757,6 @@ func (ac *AccountConnection) handleFrame(ctx context.Context, msg map[string]any
 				})
 			}
 		}
-		if ac.official != nil && (patch["twitch"] != nil || patch["kick"] != nil) {
-			ac.official.UpdateFromEstado(ac.hunt.Estado)
-		}
-		ac.mu.Unlock()
 
 	case "campo.init":
 		cp := make([]byte, len(raw))
@@ -751,28 +779,53 @@ func (ac *AccountConnection) handleFrame(ctx context.Context, msg map[string]any
 			if ev == nil {
 				continue
 			}
+			var (
+				sessionSnap *store.SessionSnapshot
+				shinyAlert  *DiscordEmbed
+				accID       int
+				nick        string
+				reportHour  int
+				reportTZ    string
+			)
 			ac.mu.Lock()
-			ac.hunt.HandleBattleEvent(ev)
+			killXP, killGold, killed := ac.hunt.HandleBattleEvent(ev)
 			seen, caught := ac.shinies.Handle(ev)
+			if killed || seen || caught {
+				accID = ac.acc.ID
+				nick = ac.acc.Nick
+				reportHour = ac.reportHour
+				reportTZ = ac.reportTZ
+			}
 			if seen || caught {
-				ac.saveSessionLocked()
-				nick := ac.acc.Nick
+				snap := ac.sessionSnapshotLocked()
+				sessionSnap = &snap
 				nome := asString(ev["nome"])
 				if caught {
-					ac.notifier.Send(DiscordEmbed{
+					shinyAlert = &DiscordEmbed{
 						Title:       fmt.Sprintf("🌟 SHINY CAPTURADO — %s", nick),
 						Description: fmt.Sprintf("Capturou **Shiny %s**!", nome),
 						Color:       ColorGreen,
-					})
+					}
 				} else if seen {
-					ac.notifier.Send(DiscordEmbed{
+					shinyAlert = &DiscordEmbed{
 						Title:       fmt.Sprintf("✨ Shiny encontrado — %s", nick),
 						Description: fmt.Sprintf("Encontrou **Shiny %s**!", nome),
 						Color:       ColorGold,
-					})
+					}
 				}
 			}
 			ac.mu.Unlock()
+
+			if killed {
+				period := CurrentDailyPeriod(time.Now(), reportHour, reportTZ)
+				_ = ac.store.AddDailyKill(period, nick, killXP, killGold)
+			}
+			if sessionSnap != nil {
+				_ = ac.store.SaveSessionState(accID, *sessionSnap)
+			}
+			if shinyAlert != nil {
+				ac.notifier.Send(*shinyAlert)
+			}
 			ac.balls.HandleBattleEvent(ev)
 			ac.shop.HandleBattleEvent(ev)
 		}
@@ -858,13 +911,15 @@ func (ac *AccountConnection) automationLoop(ctx context.Context) {
 			ac.mu.RLock()
 			autoCatch := ac.acc.Options.AutoCatch
 			accID := ac.acc.ID
-			estado := ac.hunt.Estado
 			ac.mu.RUnlock()
 			// Suppress bot auto-catch while the official WebView is attached via Bridge (prevents duplicate throws)
 			if !autoCatch || (ac.bridge != nil && ac.bridge.HasAttached(accID)) {
 				continue
 			}
-			if slot, ballID, ok := ac.balls.NextThrow(estado); ok {
+			ac.mu.RLock()
+			slot, ballID, ok := ac.balls.NextThrow(ac.hunt.Estado)
+			ac.mu.RUnlock()
+			if ok {
 				_ = ac.sendJSON(ctx, map[string]any{
 					"t":      "ball.throw",
 					"ballId": ballID,
@@ -875,8 +930,14 @@ func (ac *AccountConnection) automationLoop(ctx context.Context) {
 		case <-restockTicker.C:
 			ac.mu.RLock()
 			opts := ac.acc.Options
-			estado := deepCloneMap(ac.hunt.Estado)
-			activePk := ac.hunt.ActivePokemon()
+			est := ac.hunt.Estado
+			estado := map[string]any{
+				"gold":       est["gold"],
+				"items":      deepCloneMap(asMap(est["items"])),
+				"balls":      deepCloneMap(asMap(est["balls"])),
+				"automation": deepCloneMap(asMap(est["automation"])),
+			}
+			activePk := deepCloneMap(ac.hunt.ActivePokemon())
 			ac.mu.RUnlock()
 			if order := ac.shop.EvaluateRestock(opts, estado, activePk, ac.catalog); order != nil {
 				_ = ac.sendJSON(ctx, map[string]any{
@@ -894,7 +955,7 @@ func (ac *AccountConnection) automationLoop(ctx context.Context) {
 			ac.mu.RLock()
 			pending := ac.pendingHunt
 			lockUntil := asInt64(ac.hunt.Estado["centroLivreEm"])
-			srvNow := ac.ServerNowMs()
+			srvNow := time.Now().UnixMilli() + ac.serverOffset
 			lv := asInt(ac.hunt.Estado["level"])
 			ac.mu.RUnlock()
 			ac.pvp.Tick(ctx, lv)
@@ -952,19 +1013,22 @@ func (ac *AccountConnection) SellDepot(ctx context.Context) (*SellResult, error)
 		return nil, err
 	}
 	if err := ac.sendJSON(ctx, map[string]any{"t": "shop.sellAllPokemons"}); err != nil {
-		ac.shop.Reset()
+		ac.shop.CancelSell(ch)
 		return nil, err
 	}
+	timer := time.NewTimer(config.SellConfirmTimeout)
+	defer timer.Stop()
 	select {
 	case res, ok := <-ch:
 		if !ok {
 			return nil, errors.New("conexão reiniciada antes da confirmação")
 		}
 		return &res, nil
-	case <-time.After(config.SellConfirmTimeout):
-		ac.shop.Reset()
+	case <-timer.C:
+		ac.shop.CancelSell(ch)
 		return nil, errors.New("sem confirmação do servidor (timeout)")
 	case <-ctx.Done():
+		ac.shop.CancelSell(ch)
 		return nil, ctx.Err()
 	}
 }
@@ -1028,20 +1092,22 @@ func (ac *AccountConnection) ResetSession() {
 	ac.sessionStart = time.Now().Unix()
 	ac.session.Clear()
 	ac.shinies.Clear()
-	ac.saveSessionLocked()
+	accID := ac.acc.ID
+	snap := ac.sessionSnapshotLocked()
 	ac.mu.Unlock()
+	_ = ac.store.SaveSessionState(accID, snap)
 	ac.emitChange()
 }
 
-func (ac *AccountConnection) saveSessionLocked() {
-	_ = ac.store.SaveSessionState(ac.acc.ID, store.SessionSnapshot{
+func (ac *AccountConnection) sessionSnapshotLocked() store.SessionSnapshot {
+	return store.SessionSnapshot{
 		StartedAt: ac.sessionStart,
 		Gained:    ac.session.Snapshot(),
 		Shinies: store.ShinyCounts{
 			Seen:     ac.shinies.Seen,
 			Captured: ac.shinies.Captured,
 		},
-	})
+	}
 }
 
 func (ac *AccountConnection) setState(st ConnectionState, reason string) {
@@ -1138,6 +1204,7 @@ func (ac *AccountConnection) Snapshot() AccountTelemetry {
 	pks := asSlice(est["pokemons"])
 	dex := asMap(est["pokedex"])
 	bridgeAttached := ac.bridge != nil && ac.bridge.HasAttached(ac.acc.ID)
+	ballsCaught, ballsFailed := ac.balls.Stats()
 
 	return AccountTelemetry{
 		ID:             ac.acc.ID,
@@ -1164,8 +1231,8 @@ func (ac *AccountConnection) Snapshot() AccountTelemetry {
 		EquippedPotion: eqPotion,
 		EquippedBall:   eqBall,
 		Hunt:           ht,
-		BallsCaught:    ac.balls.Caught,
-		BallsFailed:    ac.balls.Failed,
+		BallsCaught:    ballsCaught,
+		BallsFailed:    ballsFailed,
 		PokemonCount:   len(pks),
 		PokedexCount:   len(dex),
 		Session: SessionTelemetry{
@@ -1177,7 +1244,7 @@ func (ac *AccountConnection) Snapshot() AccountTelemetry {
 		},
 		Pass: PassSnapshot{
 			CanClaim: CanClaimPass(passe, level, srvNow),
-			Raw:      passe,
+			Raw:      deepCloneMap(passe),
 		},
 		PvpAuto:        ac.acc.Options.PvpAuto,
 		ServerOffsetMs: ac.serverOffset,
@@ -1195,6 +1262,7 @@ func ProbeAccount(ctx context.Context, acc config.AccountRecord, wsURL string) P
 	if err != nil {
 		return ProbeResult{OK: false, Kind: "network", Detail: fmt.Sprintf("Proxy inválido: %v", err)}
 	}
+	defer httpClient.CloseIdleConnections()
 	pctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 
