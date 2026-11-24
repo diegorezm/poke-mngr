@@ -44,6 +44,7 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "PokeMngr",
 		Description: "Gerenciador Desktop multi-conta para PokéIdle",
+		Icon:        trayIcon,
 		Services: []application.Service{
 			application.NewService(appSvc),
 		},

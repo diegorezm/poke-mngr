@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Columns,
   LayoutGrid,
@@ -8,17 +8,37 @@ import {
   ZoomOut,
   Power,
   Coins,
+  Zap,
+  Wind,
 } from "lucide-react";
-import { AccountTelemetry, fmtCompact } from "../lib/types";
+import { AccountTelemetry, GlobalSettings, fmtCompact } from "../lib/types";
 import { api } from "../lib/api";
 
 type LayoutMode = "grid" | "columns" | "focus";
 
+function broadcastDeckCommand(
+  frames: Record<number, HTMLIFrameElement | null>,
+  type: "setUltra" | "setReduceMotion",
+  value: boolean
+) {
+  const msg = { __pokeMngr: true, type, value };
+  for (const el of Object.values(frames)) {
+    const win = el?.contentWindow;
+    if (win) {
+      win.postMessage(msg, "*");
+    }
+  }
+}
+
 export function DeckView({
   accounts,
+  settings,
+  onSettingsChange,
   onToast,
 }: {
   accounts: AccountTelemetry[];
+  settings: GlobalSettings;
+  onSettingsChange: (gs: GlobalSettings) => void;
   onToast: (msg: string) => void;
 }) {
   const [layout, setLayout] = useState<LayoutMode>("grid");
@@ -26,6 +46,7 @@ export function DeckView({
   const [zoom, setZoom] = useState<number>(1.0);
   const [hiddenIds, setHiddenIds] = useState<Record<number, boolean>>({});
   const [urls, setUrls] = useState<Record<number, string>>({});
+  const iframeRefs = useRef<Record<number, HTMLIFrameElement | null>>({});
 
   const accountIdsKey = accounts.map((a) => a.id).join(",");
 
@@ -33,10 +54,11 @@ export function DeckView({
     let alive = true;
     accounts.forEach((acc) => {
       if (urls[acc.id]) return;
+      const id = acc.id;
       api
-        .getGameURL(acc.id)
+        .getGameURL(id)
         .then((u) => {
-          if (alive) setUrls((prev) => ({ ...prev, [acc.id]: u }));
+          if (alive) setUrls((prev) => ({ ...prev, [id]: u }));
         })
         .catch(() => {});
     });
@@ -44,6 +66,38 @@ export function DeckView({
       alive = false;
     };
   }, [accountIdsKey]);
+
+  const handleToggleUltra = async () => {
+    const nextVal = !settings.deckUltra;
+    const nextSettings: GlobalSettings = { ...settings, deckUltra: nextVal };
+    const msg = nextVal
+      ? "Modo ULTRA ligado em todas as contas"
+      : "Modo ULTRA desligado";
+    broadcastDeckCommand(iframeRefs.current, "setUltra", nextVal);
+    onSettingsChange(nextSettings);
+    try {
+      await api.updateSettings(nextSettings);
+      onToast(msg);
+    } catch (e) {
+      onToast(`Erro ao salvar ULTRA: ${String(e)}`);
+    }
+  };
+
+  const handleToggleReduceMotion = async () => {
+    const nextVal = !settings.deckReduceMotion;
+    const nextSettings: GlobalSettings = { ...settings, deckReduceMotion: nextVal };
+    const msg = nextVal
+      ? "Menos animações ativado em tempo real"
+      : "Animações normais restauradas";
+    broadcastDeckCommand(iframeRefs.current, "setReduceMotion", nextVal);
+    onSettingsChange(nextSettings);
+    try {
+      await api.updateSettings(nextSettings);
+      onToast(msg);
+    } catch (e) {
+      onToast(`Erro ao salvar animações: ${String(e)}`);
+    }
+  };
 
   const activeAccounts = accounts.filter((a) => !hiddenIds[a.id]);
   const visibleAccounts =
@@ -133,8 +187,32 @@ export function DeckView({
           )}
         </div>
 
-        {/* Zoom & Power toggles */}
+        {/* Performance toggles, Zoom & Power */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleToggleUltra}
+            title="Alternar Modo ULTRA Economia em tempo real nas contas abertas"
+            className={`px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 border transition ${
+              settings.deckUltra
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                : "bg-slate-800/70 text-slate-400 border-slate-700/70 hover:text-white"
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            {settings.deckUltra ? "ULTRA ON" : "ULTRA"}
+          </button>
+          <button
+            onClick={handleToggleReduceMotion}
+            title="Alternar redução de animações (prefers-reduced-motion) sem recarregar"
+            className={`px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 border transition ${
+              settings.deckReduceMotion
+                ? "bg-sky-500/20 text-sky-300 border-sky-500/40"
+                : "bg-slate-800/70 text-slate-400 border-slate-700/70 hover:text-white"
+            }`}
+          >
+            <Wind className="w-3.5 h-3.5" />
+            Menos animações
+          </button>
           <div className="flex items-center gap-1 bg-slate-900 rounded-lg border border-slate-800 px-1.5 py-0.5">
             <button
               onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.1).toFixed(2))))}
@@ -234,6 +312,10 @@ export function DeckView({
               <div className="flex-1 relative overflow-hidden bg-black">
                 {gameUrl ? (
                   <iframe
+                    ref={(el) => {
+                      const id = acc.id;
+                      iframeRefs.current[id] = el;
+                    }}
                     src={gameUrl}
                     title={`PokeIdle ${acc.nick}`}
                     className="border-0 origin-top-left"

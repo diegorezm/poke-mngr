@@ -35,11 +35,13 @@ type errNetworkFull struct{}
 func (e errNetworkFull) Error() string { return "rede no limite de contas online" }
 
 type AccountConnection struct {
-	mu      sync.RWMutex
-	acc     config.AccountRecord
-	wsURL   string
-	waitMin int
-	downSec int
+	mu         sync.RWMutex
+	acc        config.AccountRecord
+	wsURL      string
+	waitMin    int
+	downSec    int
+	reportHour int
+	reportTZ   string
 
 	store    *store.Store
 	notifier *Notifier
@@ -53,6 +55,11 @@ type AccountConnection struct {
 	cooldownUntil time.Time
 	exitIP        string
 	wasOnline     bool
+	downSince     time.Time
+	downAlerted   bool
+	downReason    string
+	downTimer     *time.Timer
+	stopped       bool
 	onlineSince   time.Time
 	lastFrameAt   time.Time
 	serverOffset  int64 // servidorAgora - localNowMs
@@ -107,6 +114,8 @@ func NewAccountConnection(
 		wsURL:       gs.WSURL,
 		waitMin:     gs.ExternalLoginWaitMin,
 		downSec:     gs.DownAlertDelaySec,
+		reportHour:  gs.DailyReportHour,
+		reportTZ:    gs.ReportTZ,
 		store:       st,
 		notifier:    notifier,
 		catalog:     catalog,
@@ -131,7 +140,7 @@ func NewAccountConnection(
 	}
 
 	ac.hunt.OnKill = func(xp, gold int64) {
-		period := time.Now().Format("2006-01-02")
+		period := ac.currentDailyPeriod()
 		_ = ac.store.AddDailyKill(period, ac.acc.Nick, xp, gold)
 	}
 	ac.market = NewMarketClient(acc.Name(), ac.sendJSON)
@@ -149,9 +158,11 @@ func (ac *AccountConnection) Start(parent context.Context) {
 }
 
 func (ac *AccountConnection) Stop() {
-	ac.mu.RLock()
+	ac.mu.Lock()
+	ac.stopped = true
+	ac.cancelDownTimerLocked()
 	cancel := ac.cancel
-	ac.mu.RUnlock()
+	ac.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
@@ -163,7 +174,87 @@ func (ac *AccountConnection) UpdateSettings(gs config.GlobalSettings) {
 	ac.wsURL = gs.WSURL
 	ac.waitMin = gs.ExternalLoginWaitMin
 	ac.downSec = gs.DownAlertDelaySec
+	ac.reportHour = gs.DailyReportHour
+	ac.reportTZ = gs.ReportTZ
 	ac.mu.Unlock()
+}
+
+func (ac *AccountConnection) currentDailyPeriod() string {
+	ac.mu.RLock()
+	h := ac.reportHour
+	tz := ac.reportTZ
+	ac.mu.RUnlock()
+	return CurrentDailyPeriod(time.Now(), h, tz)
+}
+
+func (ac *AccountConnection) cancelDownTimerLocked() {
+	if ac.downTimer != nil {
+		ac.downTimer.Stop()
+		ac.downTimer = nil
+	}
+}
+
+func (ac *AccountConnection) scheduleDisconnectAlert(reason string) {
+	var immediate *DiscordEmbed
+
+	ac.mu.Lock()
+	if !ac.wasOnline || ac.stopped || ac.downAlerted {
+		ac.mu.Unlock()
+		return
+	}
+	if ac.downSince.IsZero() {
+		ac.downSince = time.Now()
+	}
+	ac.downReason = reason
+	if ac.downSec <= 0 {
+		ac.cancelDownTimerLocked()
+		ac.downAlerted = true
+		motivo := reason
+		if motivo == "" {
+			motivo = "queda de conexão"
+		}
+		immediate = &DiscordEmbed{
+			Title:       ac.acc.Nick,
+			Description: "🔴 Caiu.",
+			Color:       ColorRed,
+			Fields: []DiscordEmbedField{
+				{Name: "Motivo", Value: motivo, Inline: false},
+			},
+		}
+	} else if ac.downTimer == nil {
+		delay := time.Duration(ac.downSec) * time.Second
+		ac.downTimer = time.AfterFunc(delay, ac.fireDownAlert)
+	}
+	ac.mu.Unlock()
+
+	if immediate != nil {
+		ac.notifier.Send(*immediate)
+	}
+}
+
+func (ac *AccountConnection) fireDownAlert() {
+	ac.mu.Lock()
+	ac.downTimer = nil
+	if ac.stopped || ac.downAlerted || !ac.wasOnline || ac.state == StateOnline {
+		ac.mu.Unlock()
+		return
+	}
+	ac.downAlerted = true
+	nick := ac.acc.Nick
+	motivo := ac.downReason
+	if motivo == "" {
+		motivo = "queda de conexão"
+	}
+	ac.mu.Unlock()
+
+	ac.notifier.Send(DiscordEmbed{
+		Title:       nick,
+		Description: "🔴 Caiu.",
+		Color:       ColorRed,
+		Fields: []DiscordEmbedField{
+			{Name: "Motivo", Value: motivo, Inline: false},
+		},
+	})
 }
 
 func (ac *AccountConnection) UpdateOptions(opts config.AccountOptions) {
@@ -293,6 +384,13 @@ func (ac *AccountConnection) runForever(ctx context.Context) {
 			ac.state = StateBlocked
 			ac.block = &BlockInfo{Kind: blk.kind, Detail: blk.detail}
 			ac.lastReason = blk.detail
+			ac.cancelDownTimerLocked()
+			if ac.wasOnline {
+				if ac.downSince.IsZero() {
+					ac.downSince = time.Now()
+				}
+				ac.downAlerted = true
+			}
 			ac.mu.Unlock()
 			_ = ac.store.UpdateAccountAuthStatus(ac.acc.ID, blk.kind, blk.detail)
 			ac.notifier.Send(DiscordEmbed{
@@ -314,11 +412,33 @@ func (ac *AccountConnection) runForever(ctx context.Context) {
 				wait = config.CooldownDefault
 			}
 			ac.mu.RUnlock()
+			reason := fmt.Sprintf("Login externo detectado (code %d) — aguardando %d min", ext.code, int(wait.Minutes()))
+			var pauseAlert *DiscordEmbed
 			ac.mu.Lock()
 			ac.state = StatePausedCooldown
 			ac.cooldownUntil = time.Now().Add(wait)
-			ac.lastReason = fmt.Sprintf("Login externo detectado (code %d) — aguardando %d min", ext.code, int(wait.Minutes()))
+			ac.lastReason = reason
+			if ac.wasOnline && !ac.stopped {
+				ac.cancelDownTimerLocked()
+				if ac.downSince.IsZero() {
+					ac.downSince = time.Now()
+				}
+				if !ac.downAlerted {
+					ac.downAlerted = true
+					pauseAlert = &DiscordEmbed{
+						Title:       ac.acc.Nick,
+						Description: "🔴 Caiu (login externo).",
+						Color:       ColorRed,
+						Fields: []DiscordEmbedField{
+							{Name: "Motivo", Value: reason, Inline: false},
+						},
+					}
+				}
+			}
 			ac.mu.Unlock()
+			if pauseAlert != nil {
+				ac.notifier.Send(*pauseAlert)
+			}
 			ac.emitChange()
 			select {
 			case <-ctx.Done():
@@ -330,7 +450,9 @@ func (ac *AccountConnection) runForever(ctx context.Context) {
 
 		var nf errNetworkFull
 		if errors.As(err, &nf) {
-			ac.setState(StateDisconnected, "Rede no limite de 4 contas online; tentando novamente em 30s")
+			nfReason := "Rede no limite de 4 contas online; tentando novamente em 30s"
+			ac.setState(StateDisconnected, nfReason)
+			ac.scheduleDisconnectAlert(nfReason)
 			select {
 			case <-ctx.Done():
 				return
@@ -341,6 +463,7 @@ func (ac *AccountConnection) runForever(ctx context.Context) {
 
 		reason := friendlyReason(err)
 		ac.setState(StateDisconnected, reason)
+		ac.scheduleDisconnectAlert(reason)
 		delay := config.ReconnectDelay
 		if time.Since(start) >= config.MinUptimeFast {
 			delay = 0
@@ -453,6 +576,7 @@ func (ac *AccountConnection) connectOnce(ctx context.Context) error {
 	sessCtx, sessCancel := context.WithCancel(ctx)
 	defer sessCancel()
 
+	var recoveryAlert *DiscordEmbed
 	ac.mu.Lock()
 	ac.state = StateOnline
 	ac.block = nil
@@ -464,8 +588,26 @@ func (ac *AccountConnection) connectOnce(ctx context.Context) error {
 		ac.sessionStart = time.Now().Unix()
 		ac.saveSessionLocked()
 	}
+	ac.cancelDownTimerLocked()
+	if ac.downAlerted && !ac.downSince.IsZero() {
+		downtime := time.Since(ac.downSince)
+		recoveryAlert = &DiscordEmbed{
+			Title:       ac.acc.Nick,
+			Description: "🟢 Voltou ao ar.",
+			Color:       ColorGreen,
+			Fields: []DiscordEmbedField{
+				{Name: "Tempo fora", Value: formatDurationPT(downtime), Inline: true},
+			},
+		}
+	}
 	ac.wasOnline = true
+	ac.downSince = time.Time{}
+	ac.downAlerted = false
+	ac.downReason = ""
 	ac.mu.Unlock()
+	if recoveryAlert != nil {
+		ac.notifier.Send(*recoveryAlert)
+	}
 	_ = ac.store.UpdateAccountAuthStatus(acc.ID, "ok", "")
 	ac.emitChange()
 
@@ -573,7 +715,7 @@ func (ac *AccountConnection) handleFrame(ctx context.Context, msg map[string]any
 		if len(deltas) > 0 {
 			ac.saveSessionLocked()
 			nick := ac.acc.Nick
-			period := time.Now().Format("2006-01-02")
+			period := CurrentDailyPeriod(time.Now(), ac.reportHour, ac.reportTZ)
 			for k, d := range deltas {
 				_ = ac.store.AddDailyRareItem(period, nick, k, d)
 				ac.notifier.Send(DiscordEmbed{

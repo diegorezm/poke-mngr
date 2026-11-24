@@ -10,6 +10,7 @@ import {
   Pencil,
   Shield,
   Sliders,
+  BarChart3,
 } from "lucide-react";
 import {
   AccountRecord,
@@ -73,6 +74,8 @@ export function SettingsView({
 
   // Local settings draft
   const [gs, setGs] = useState<GlobalSettings>(settings);
+  const [autostart, setAutostart] = useState(false);
+  const [autostartBusy, setAutostartBusy] = useState(false);
 
   useEffect(() => {
     setGs(settings);
@@ -90,6 +93,7 @@ export function SettingsView({
   useEffect(() => {
     reloadAccounts();
     api.getBookmarkletCode().then(setBookmarklet).catch(() => {});
+    api.getAutostart().then(setAutostart).catch(() => {});
   }, []);
 
   const handleParsePaste = async (val: string) => {
@@ -218,6 +222,30 @@ export function SettingsView({
     } catch (e) {
       onToast(`Falha no Discord: ${String(e)}`);
     }
+  };
+
+  const handleSendDailyReport = async () => {
+    try {
+      await api.sendDailyReportNow(gs.discordWebhookUrl);
+      onToast("Relatório diário enviado ao Discord!");
+    } catch (e) {
+      onToast(`Falha ao enviar relatório: ${String(e)}`);
+    }
+  };
+
+  const handleToggleAutostart = async (checked: boolean) => {
+    const okMsg = checked
+      ? "PokeMngr será iniciado com o Windows!"
+      : "Início automático com o Windows desativado.";
+    setAutostartBusy(true);
+    try {
+      await api.setAutostart(checked);
+      setAutostart(checked);
+      onToast(okMsg);
+    } catch (e) {
+      onToast(`Erro no autostart: ${String(e)}`);
+    }
+    setAutostartBusy(false);
   };
 
   return (
@@ -717,6 +745,74 @@ export function SettingsView({
                 >
                   <Send className="w-3.5 h-3.5" /> Testar
                 </button>
+                <button
+                  onClick={handleSendDailyReport}
+                  title="Enviar agora o relatório acumulado do dia atual"
+                  className="px-3 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 inline-flex items-center gap-1"
+                >
+                  <BarChart3 className="w-3.5 h-3.5" /> Relatório
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              <div>
+                <label className="block text-slate-400 mb-1">
+                  Hora Relatório (0–23)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={gs.dailyReportHour}
+                  onChange={(e) =>
+                    setGs({
+                      ...gs,
+                      dailyReportHour: Math.max(0, Math.min(23, Number(e.target.value) || 0)),
+                    })
+                  }
+                  className="w-full rounded-lg bg-[#0b0e1b] border border-slate-700 px-2.5 py-2 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Fuso Horário</label>
+                <input
+                  list="tz-options"
+                  value={gs.reportTz}
+                  onChange={(e) => setGs({ ...gs, reportTz: e.target.value })}
+                  placeholder="America/Sao_Paulo"
+                  className="w-full rounded-lg bg-[#0b0e1b] border border-slate-700 px-2.5 py-2 text-white font-mono"
+                />
+                <datalist id="tz-options">
+                  <option value="America/Sao_Paulo" />
+                  <option value="America/Manaus" />
+                  <option value="America/Cuiaba" />
+                  <option value="America/Fortaleza" />
+                  <option value="America/Rio_Branco" />
+                  <option value="Europe/Lisbon" />
+                  <option value="UTC" />
+                </datalist>
+              </div>
+              <div>
+                <label
+                  className="block text-slate-400 mb-1"
+                  title="Segundos offline antes de notificar queda no Discord (0 = imediato)"
+                >
+                  Alerta Queda (seg)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={3600}
+                  value={gs.downAlertDelaySec}
+                  onChange={(e) =>
+                    setGs({
+                      ...gs,
+                      downAlertDelaySec: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                  className="w-full rounded-lg bg-[#0b0e1b] border border-slate-700 px-2.5 py-2 text-white font-mono"
+                />
               </div>
             </div>
 
@@ -757,6 +853,15 @@ export function SettingsView({
           <div className="space-y-3">
             <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 p-3 space-y-2.5">
               <div className="font-medium text-slate-200">Bandeja & Deck Visual</div>
+              <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autostart}
+                  disabled={autostartBusy}
+                  onChange={(e) => handleToggleAutostart(e.target.checked)}
+                />
+                Iniciar automaticamente com o Windows
+              </label>
               <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
                 <input
                   type="checkbox"

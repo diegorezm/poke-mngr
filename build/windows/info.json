@@ -5,11 +5,11 @@
 	"info": {
 		"0409": {
 			"ProductVersion": "0.1.0",
-			"CompanyName": "My Company",
-			"FileDescription": "A poke-mngr application",
-			"LegalCopyright": "© 2026, My Company",
-			"ProductName": "My Product",
-			"Comments": "This is a comment"
+			"CompanyName": "PokeMngr",
+			"FileDescription": "PokeMngr — Gerenciador Desktop multi-conta para PokéIdle",
+			"LegalCopyright": "© 2026, PokeMngr",
+			"ProductName": "PokeMngr",
+			"Comments": "PokéIdle Desktop Manager"
 		}
 	}
 }

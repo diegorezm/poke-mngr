@@ -73,6 +73,10 @@ export function GetActivePokemonSheet(accountID: number): $CancellablePromise<po
     return $Call.ByID(277207613, accountID);
 }
 
+export function GetAutostart(): $CancellablePromise<boolean> {
+    return $Call.ByID(4098483512);
+}
+
 export function GetBookmarkletCode(): $CancellablePromise<string> {
     return $Call.ByID(783130089);
 }
@@ -231,6 +235,14 @@ export function SellDepot(accountID: number): $CancellablePromise<pokeidle$0.Sel
 
 export function SendChatMessage(accountID: number, canal: string, texto: string): $CancellablePromise<void> {
     return $Call.ByID(3285684776, accountID, canal, texto);
+}
+
+export function SendDailyReportNow(webhookURL: string): $CancellablePromise<void> {
+    return $Call.ByID(3946729542, webhookURL);
+}
+
+export function SetAutostart(enabled: boolean): $CancellablePromise<void> {
+    return $Call.ByID(3531229700, enabled);
 }
 
 export function SetPvpAuto(accountID: number, enabled: boolean): $CancellablePromise<void> {

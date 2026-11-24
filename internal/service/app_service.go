@@ -130,14 +130,60 @@ func (s *AppService) TestAccount(id int) (pokeidle.ProbeResult, error) {
 	return pokeidle.ProbeAccount(context.Background(), conn.Account(), s.mgr.Settings().WSURL), nil
 }
 
-// --- Settings & Discord ---
+// --- Settings, Autostart & Discord ---
 
 func (s *AppService) GetSettings() config.GlobalSettings {
 	return s.mgr.Settings()
 }
 
 func (s *AppService) UpdateSettings(gs config.GlobalSettings) error {
-	return s.mgr.UpdateSettings(gs)
+	prev := s.mgr.Settings()
+	if err := s.mgr.UpdateSettings(gs); err != nil {
+		return err
+	}
+	if prev.DeckUltra != gs.DeckUltra || prev.DeckReduceMotion != gs.DeckReduceMotion {
+		s.syncGameWindowsDisplay(gs.DeckUltra, gs.DeckReduceMotion)
+	}
+	return nil
+}
+
+func (s *AppService) syncGameWindowsDisplay(ultra, reduceMotion bool) {
+	s.winMu.Lock()
+	wins := make([]*application.WebviewWindow, 0, len(s.gameWindows))
+	for _, w := range s.gameWindows {
+		if w != nil {
+			wins = append(wins, w)
+		}
+	}
+	s.winMu.Unlock()
+	if len(wins) == 0 {
+		return
+	}
+	js := fmt.Sprintf(
+		`if (window.__pokeMngrDeck) { window.__pokeMngrDeck.setUltra(%t); window.__pokeMngrDeck.setReduceMotion(%t); }`,
+		ultra,
+		reduceMotion,
+	)
+	for _, w := range wins {
+		w.ExecJS(js)
+	}
+}
+
+func (s *AppService) GetAutostart() (bool, error) {
+	if s.app == nil || s.app.Autostart == nil {
+		return false, nil
+	}
+	return s.app.Autostart.IsEnabled()
+}
+
+func (s *AppService) SetAutostart(enabled bool) error {
+	if s.app == nil || s.app.Autostart == nil {
+		return fmt.Errorf("autostart indisponível neste ambiente")
+	}
+	if enabled {
+		return s.app.Autostart.Enable()
+	}
+	return s.app.Autostart.Disable()
 }
 
 func (s *AppService) TestDiscordWebhook(webhookURL string) error {
@@ -146,6 +192,10 @@ func (s *AppService) TestDiscordWebhook(webhookURL string) error {
 		Description: "Conexão com o Discord funcionando corretamente!",
 		Color:       pokeidle.ColorGreen,
 	})
+}
+
+func (s *AppService) SendDailyReportNow(webhookURL string) error {
+	return s.mgr.SendDailyReportNow(context.Background(), webhookURL)
 }
 
 func (s *AppService) GetBookmarkletCode() string {

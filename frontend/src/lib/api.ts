@@ -47,7 +47,10 @@ export const api = {
   testAccount: (id: number) => invoke<ProbeResult>("TestAccount", id),
   getSettings: () => invoke<GlobalSettings>("GetSettings"),
   updateSettings: (gs: GlobalSettings) => invoke<void>("UpdateSettings", gs),
+  getAutostart: () => invoke<boolean>("GetAutostart"),
+  setAutostart: (enabled: boolean) => invoke<void>("SetAutostart", enabled),
   testDiscordWebhook: (url: string) => invoke<void>("TestDiscordWebhook", url),
+  sendDailyReportNow: (url: string) => invoke<void>("SendDailyReportNow", url),
   getBookmarkletCode: () => invoke<string>("GetBookmarkletCode"),
   equipItem: (accountId: number, kind: "ball" | "potion", itemId: number) =>
     invoke<void>("EquipItem", accountId, kind, itemId),

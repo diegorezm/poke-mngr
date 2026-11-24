@@ -13,6 +13,7 @@ import (
 
 	"poke-mngr/internal/config"
 	"poke-mngr/internal/store"
+	"poke-mngr/internal/sysmem"
 )
 
 type AccountManager struct {
@@ -31,6 +32,9 @@ type AccountManager struct {
 	market   *MarketService
 
 	conns map[int]*AccountConnection
+
+	memMu    sync.RWMutex
+	memStats sysmem.Stats
 
 	telemetryListenersMu sync.RWMutex
 	onTelemetry          func(TelemetrySnapshot)
@@ -71,6 +75,8 @@ func (m *AccountManager) Start(parent context.Context) error {
 		return err
 	}
 	go m.notifier.Run(ctx)
+	go m.dailyReportLoop(ctx)
+	go m.memoryLoop(ctx)
 	go m.catalog.EnsureLoaded(ctx)
 	go m.creatures.EnsureLoaded(ctx)
 	go m.market.RunRuleLoop(ctx)
@@ -378,10 +384,40 @@ func (m *AccountManager) Snapshot() TelemetrySnapshot {
 		return accounts[i].ID < accounts[j].ID
 	})
 
+	m.memMu.RLock()
+	mem := m.memStats
+	m.memMu.RUnlock()
+	var memPtr *sysmem.Stats
+	if mem.TotalBytes > 0 {
+		memCopy := mem
+		memPtr = &memCopy
+	}
+
 	return TelemetrySnapshot{
 		ServerTimeMs: time.Now().UnixMilli(),
 		BridgePort:   m.bridge.Port(),
+		Memory:       memPtr,
 		Accounts:     accounts,
+	}
+}
+
+func (m *AccountManager) memoryLoop(ctx context.Context) {
+	sample := func() {
+		stats := sysmem.Collect()
+		m.memMu.Lock()
+		m.memStats = stats
+		m.memMu.Unlock()
+	}
+	sample()
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sample()
+		}
 	}
 }
 

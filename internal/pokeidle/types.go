@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"poke-mngr/internal/sysmem"
 )
 
 type ConnectionState string
@@ -130,6 +132,7 @@ type AccountTelemetry struct {
 type TelemetrySnapshot struct {
 	ServerTimeMs int64              `json:"serverTimeMs"`
 	BridgePort   int                `json:"bridgePort"`
+	Memory       *sysmem.Stats      `json:"memory,omitempty"`
 	Accounts     []AccountTelemetry `json:"accounts"`
 }
 

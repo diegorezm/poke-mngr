@@ -422,12 +422,12 @@ func buildBridgeBootstrapJS(accID int, nick, token, deviceID string, bridgePort 
   window.__pokeMngrBridgeInstalled = true;
 
   // 1. Virtualize per-window session keys so multiple accounts never overwrite each other's localStorage
+  var mem = {
+    'sessao': %q,
+    'id-dispositivo': %s,
+    'cfg-ultra': %q
+  };
   try {
-    var mem = {
-      'sessao': %q,
-      'id-dispositivo': %s,
-      'cfg-ultra': %q
-    };
     var origGet = Storage.prototype.getItem;
     var origSet = Storage.prototype.setItem;
     var origRem = Storage.prototype.removeItem;
@@ -469,24 +469,111 @@ func buildBridgeBootstrapJS(accID int, nick, token, deviceID string, bridgePort 
     }
   });
 
-  // 3. Optional Reduce Motion (pokeidleDeck technique)
-  var REDUCE = %t;
-  if (REDUCE) {
-    try {
-      var origMM = window.matchMedia.bind(window);
-      window.matchMedia = function(q) {
-        if (typeof q === 'string' && q.indexOf('prefers-reduced-motion') !== -1) {
-          var m = q.indexOf('reduce') !== -1;
-          return {
-            matches: m, media: q, onchange: null,
-            addListener: function(){}, removeListener: function(){},
-            addEventListener: function(){}, removeEventListener: function(){},
-            dispatchEvent: function(){ return false; }
-          };
+  // 3. Live Reduce Motion (pokeidleDeck motion.js technique: matchMedia + CSSMediaRule rewriting)
+  var REDUCE_RE = /prefers-reduced-motion\s*:\s*reduce/;
+  var NO_PREF_RE = /prefers-reduced-motion\s*:\s*no-preference/;
+  var reduceMotion = %t;
+  var origMediaRules = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+
+  try {
+    var origMM = window.matchMedia.bind(window);
+    window.matchMedia = function(query) {
+      var list = origMM(query);
+      var text = String(query || '');
+      var wantsReduce = REDUCE_RE.test(text);
+      if (!wantsReduce && !NO_PREF_RE.test(text)) return list;
+      return new Proxy(list, {
+        get: function(target, prop) {
+          if (prop === 'matches') {
+            return wantsReduce ? (reduceMotion || target.matches) : (!reduceMotion && target.matches);
+          }
+          var val = Reflect.get(target, prop, target);
+          return typeof val === 'function' ? val.bind(target) : val;
         }
-        return origMM(q);
-      };
+      });
+    };
+  } catch (e) {}
+
+  function rewriteMotionRules(rules) {
+    if (!rules || !origMediaRules) return;
+    for (var i = 0; i < rules.length; i++) {
+      var rule = rules[i];
+      if (typeof CSSMediaRule !== 'undefined' && rule instanceof CSSMediaRule) {
+        var text = origMediaRules.has(rule) ? origMediaRules.get(rule) : rule.media.mediaText;
+        if (REDUCE_RE.test(text) || NO_PREF_RE.test(text)) {
+          origMediaRules.set(rule, text);
+          var wanted = reduceMotion ? (REDUCE_RE.test(text) ? 'all' : 'not all') : text;
+          if (rule.media.mediaText !== wanted) rule.media.mediaText = wanted;
+        }
+      }
+      if (rule.cssRules) rewriteMotionRules(rule.cssRules);
+    }
+  }
+
+  function syncMotionSheets() {
+    try {
+      var sheets = document.styleSheets;
+      for (var i = 0; i < sheets.length; i++) {
+        var rules;
+        try { rules = sheets[i].cssRules; } catch (e) { continue; }
+        rewriteMotionRules(rules);
+      }
     } catch (e) {}
   }
+
+  function applyReduceMotion(on) {
+    reduceMotion = !!on;
+    syncMotionSheets();
+    return reduceMotion;
+  }
+
+  document.addEventListener('load', function(e) {
+    if (e.target instanceof HTMLLinkElement || e.target instanceof HTMLStyleElement) {
+      syncMotionSheets();
+    }
+  }, true);
+  document.addEventListener('DOMContentLoaded', syncMotionSheets);
+  window.addEventListener('load', syncMotionSheets);
+
+  // 4. Live ULTRA Battery Saver toggle (pokeidleDeck technique: #btn-config / #cfg-ultra / #ultra-sair)
+  function applyUltra(on) {
+    var want = !!on;
+    var isUltra = function() {
+      return document.documentElement && document.documentElement.classList.contains('modo-ultra');
+    };
+    if (!want) {
+      var sair = document.querySelector('#ultra-sair');
+      if (sair) sair.click();
+      mem['cfg-ultra'] = '0';
+      return !isUltra();
+    }
+    if (isUltra()) {
+      mem['cfg-ultra'] = '1';
+      return true;
+    }
+    var appEl = document.querySelector('#app');
+    if (!appEl || appEl.classList.contains('hidden')) {
+      mem['cfg-ultra'] = '1';
+      return true;
+    }
+    var btnCfg = document.querySelector('#btn-config');
+    if (btnCfg) btnCfg.click();
+    var cfgUltra = document.querySelector('#cfg-ultra');
+    if (cfgUltra) cfgUltra.click();
+    mem['cfg-ultra'] = '1';
+    return isUltra();
+  }
+
+  window.__pokeMngrDeck = {
+    setUltra: applyUltra,
+    setReduceMotion: applyReduceMotion
+  };
+
+  window.addEventListener('message', function(ev) {
+    var d = ev && ev.data;
+    if (!d || typeof d !== 'object' || d.__pokeMngr !== true) return;
+    if (d.type === 'setUltra') applyUltra(!!d.value);
+    if (d.type === 'setReduceMotion') applyReduceMotion(!!d.value);
+  });
 })();`, string(sessBytes), string(devBytes), ultraVal, string(bridgeURLBytes), reduceMotion)
 }

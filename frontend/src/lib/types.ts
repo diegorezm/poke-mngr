@@ -145,9 +145,17 @@ export interface AccountTelemetry {
   updatedAt: number;
 }
 
+export interface MemoryStats {
+  totalBytes: number;
+  appBytes: number;
+  webViewBytes: number;
+  processCount: number;
+}
+
 export interface TelemetrySnapshot {
   serverTimeMs: number;
   bridgePort: number;
+  memory?: MemoryStats | null;
   accounts: AccountTelemetry[];
 }
 
@@ -471,6 +479,16 @@ export function fmtDuration(sec: number): string {
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${rem}s`;
   return `${rem}s`;
+}
+
+export function fmtBytes(bytes: number | undefined | null): string {
+  const b = Number(bytes || 0);
+  if (!Number.isFinite(b) || b <= 0) return "0 MB";
+  const mb = b / (1024 * 1024);
+  if (mb >= 1024) {
+    return `${(mb / 1024).toFixed(2)} GB`;
+  }
+  return `${Math.round(mb)} MB`;
 }
 
 export function defaultAccountOptions(): AccountOptions {

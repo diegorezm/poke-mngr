@@ -21,6 +21,7 @@ import { api } from "./lib/api";
 import {
   GlobalSettings,
   TelemetrySnapshot,
+  fmtBytes,
   fmtCompact,
 } from "./lib/types";
 import { AccountCard } from "./components/AccountCard";
@@ -165,9 +166,11 @@ export function App() {
       {/* Sidebar */}
       <aside className="w-56 shrink-0 bg-[#0d101d] border-r border-slate-800/80 flex flex-col">
         <div className="px-4 py-4 border-b border-slate-800/80 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-rose-500 flex items-center justify-center font-black text-slate-950 shadow">
-            P
-          </div>
+          <img
+            src="/icon.svg"
+            alt="PokeMngr"
+            className="w-8 h-8 rounded-xl shadow shrink-0"
+          />
           <div>
             <div className="font-bold text-sm tracking-tight text-white">PokeMngr</div>
             <div className="text-[10px] text-slate-400">Desktop Tray · Bridge WS</div>
@@ -208,6 +211,17 @@ export function App() {
             <span>Telas abertas</span>
             <span className="font-mono text-indigo-300">{openBridges}</span>
           </div>
+          {snap.memory && snap.memory.totalBytes > 0 && (
+            <div
+              className="flex justify-between"
+              title={`App: ${fmtBytes(snap.memory.appBytes)} · WebView2: ${fmtBytes(snap.memory.webViewBytes)} (${snap.memory.processCount} processos)`}
+            >
+              <span>Memória RAM</span>
+              <span className="font-mono text-amber-300">
+                {fmtBytes(snap.memory.totalBytes)}
+              </span>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -314,7 +328,12 @@ export function App() {
           )}
 
           {tab === "deck" && (
-            <DeckView accounts={snap.accounts} onToast={showToast} />
+            <DeckView
+              accounts={snap.accounts}
+              settings={settings}
+              onSettingsChange={setSettings}
+              onToast={showToast}
+            />
           )}
 
           {tab === "mapa" && (
