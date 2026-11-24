@@ -114,12 +114,12 @@ export function PokemonSheetModal({
                 </span>
               </div>
 
-              <div className="px-stage flex-1 min-h-[164px] flex flex-col items-center justify-center gap-3 p-4">
+              <div className="px-stage flex-1 min-h-[176px] flex flex-col items-center justify-center gap-3 p-4">
                 <div className="animate-ds-idle">
                   <PokemonSprite
                     looktype={sheet.looktype}
                     bridgePort={bridgePort}
-                    size={92}
+                    size={110}
                     shiny={sheet.shiny}
                   />
                 </div>

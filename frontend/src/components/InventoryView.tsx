@@ -388,12 +388,12 @@ export function InventoryView({
                 pk.shiny ? "!border-amber-500 ring-2 ring-amber-400/40" : ""
               }`}
             >
-              <div className="px-stage !border-2 w-14 h-14 flex items-center justify-center shrink-0 relative">
+              <div className="px-stage !border-2 w-16 h-16 flex items-center justify-center shrink-0 relative">
                 <div className="group-hover:animate-ds-idle">
                   <PokemonSprite
                     looktype={pk.looktype}
                     bridgePort={bridgePort}
-                    size={46}
+                    size={54}
                     shiny={pk.shiny}
                   />
                 </div>

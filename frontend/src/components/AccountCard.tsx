@@ -179,12 +179,12 @@ export function AccountCard({
         {/* Header: Sprite + Trainer Info + Action Buttons */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="group px-stage w-14 h-14 flex items-center justify-center relative shrink-0">
+            <div className="group px-stage w-16 h-16 flex items-center justify-center relative shrink-0">
               <div className="group-hover:animate-ds-idle">
                 <PokemonSprite
                   looktype={pk?.looktype}
                   bridgePort={bridgePort}
-                  size={48}
+                  size={56}
                   shiny={pk?.shiny}
                 />
               </div>
