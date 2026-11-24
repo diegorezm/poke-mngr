@@ -53,15 +53,19 @@ func TestStoreAccountsAndLimit(t *testing.T) {
 		t.Fatalf("expected redacted token, got token=%q hint=%q", red.Token, red.TokenHint)
 	}
 
-	// Settings roundtrip
+	// Settings roundtrip (defaults + explicit false for MinimizeToTrayOnClose)
 	gs := st.LoadGlobalSettings()
+	if !gs.MinimizeToTrayOnClose {
+		t.Fatalf("expected MinimizeToTrayOnClose default to be true")
+	}
 	gs.CardStyle = "medalhao"
 	gs.ExternalLoginWaitMin = 12
+	gs.MinimizeToTrayOnClose = false
 	if err := st.SaveGlobalSettings(gs); err != nil {
 		t.Fatalf("SaveGlobalSettings: %v", err)
 	}
 	gs2 := st.LoadGlobalSettings()
-	if gs2.CardStyle != "medalhao" || gs2.ExternalLoginWaitMin != 12 {
+	if gs2.CardStyle != "medalhao" || gs2.ExternalLoginWaitMin != 12 || gs2.MinimizeToTrayOnClose {
 		t.Fatalf("settings mismatch: %+v", gs2)
 	}
 }

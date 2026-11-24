@@ -40,6 +40,7 @@ func main() {
 	appSvc := service.NewAppService(mgr)
 
 	var quitting atomic.Bool
+	var hiddenByUser atomic.Bool
 	var mainWin *application.WebviewWindow
 	var tray *application.SystemTray
 	isDev := os.Getenv("FRONTEND_DEVSERVER_URL") != ""
@@ -48,11 +49,20 @@ func main() {
 		if mainWin == nil {
 			return
 		}
+		hiddenByUser.Store(false)
 		mainWin.Show()
 		if mainWin.IsMinimised() {
 			mainWin.UnMinimise()
 		}
 		mainWin.Focus()
+	}
+
+	hideMain := func() {
+		if mainWin == nil {
+			return
+		}
+		hiddenByUser.Store(true)
+		mainWin.Hide()
 	}
 
 	var singleInstance *application.SingleInstanceOptions
@@ -77,12 +87,13 @@ func main() {
 		},
 		SingleInstance: singleInstance,
 		Windows: application.WindowsOptions{
-			DisableQuitOnLastWindowClosed: !isDev,
+			DisableQuitOnLastWindowClosed: true,
 		},
 		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: isDev,
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
 		OnShutdown: func() {
+			quitting.Store(true)
 			appSvc.CloseAllGameWindows()
 			mgr.Stop()
 		},
@@ -90,7 +101,7 @@ func main() {
 	appSvc.BindApp(app)
 
 	gs := mgr.Settings()
-	startHidden := !isDev && gs.StartMinimized
+	startHidden := gs.StartMinimized
 	mainWin = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            "PokeMngr — PokéIdle Desktop",
@@ -103,21 +114,21 @@ func main() {
 		URL:              "/",
 	})
 
-	// Hide to system tray instead of exiting when user clicks the X button (production only;
-	// in `task dev` closing the window quits cleanly so no orphan process lingers in the tray).
+	// By default (MinimizeToTrayOnClose=true), clicking X hides to the system tray so accounts
+	// keep farming in the background. When disabled in Settings, clicking X quits cleanly and
+	// stops all background processes (WebSockets, bridge, game/live windows).
 	mainWin.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		if quitting.Load() {
 			return
 		}
-		if isDev {
-			quitting.Store(true)
-			app.Quit()
-			return
-		}
 		if mgr.Settings().MinimizeToTrayOnClose {
 			e.Cancel()
-			mainWin.Hide()
+			hideMain()
+			return
 		}
+		e.Cancel()
+		quitting.Store(true)
+		go app.Quit()
 	})
 
 	// Safety net: if WebView2 delays NavigationCompleted on Windows, force-show the main window
@@ -126,7 +137,7 @@ func main() {
 		app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(_ *application.ApplicationEvent) {
 			go func() {
 				time.Sleep(2 * time.Second)
-				if mainWin != nil && !mainWin.IsVisible() && !quitting.Load() {
+				if mainWin != nil && !mainWin.IsVisible() && !quitting.Load() && !hiddenByUser.Load() {
 					showMain()
 				}
 			}()
@@ -150,9 +161,7 @@ func main() {
 	})
 	trayMenu.AddSeparator()
 	trayMenu.Add("Minimizar para Bandeja").OnClick(func(_ *application.Context) {
-		if mainWin != nil {
-			mainWin.Hide()
-		}
+		hideMain()
 	})
 	trayMenu.AddSeparator()
 	trayMenu.Add("Sair do PokeMngr").OnClick(func(_ *application.Context) {
@@ -165,7 +174,7 @@ func main() {
 			return
 		}
 		if mainWin.IsVisible() {
-			mainWin.Hide()
+			hideMain()
 		} else {
 			showMain()
 		}

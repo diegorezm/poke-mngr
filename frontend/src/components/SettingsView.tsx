@@ -286,6 +286,38 @@ export function SettingsView({
     setAutostartBusy(false);
   };
 
+  const handleToggleMinimizeToTray = async (checked: boolean) => {
+    const nextGs: GlobalSettings = { ...gs, minimizeToTrayOnClose: checked };
+    const okMsg = checked
+      ? "Ao clicar no X, o PokeMngr irá para a bandeja em segundo plano."
+      : "Ao clicar no X, o PokeMngr será encerrado completamente (sem processos em segundo plano).";
+    setGs(nextGs);
+    try {
+      await api.updateSettings(nextGs);
+      onSettingsChange(nextGs);
+      onToast(okMsg);
+    } catch (e) {
+      setGs(gs);
+      onToast(`Erro ao salvar comportamento ao fechar: ${String(e)}`);
+    }
+  };
+
+  const handleToggleStartMinimized = async (checked: boolean) => {
+    const nextGs: GlobalSettings = { ...gs, startMinimized: checked };
+    const okMsg = checked
+      ? "PokeMngr iniciará minimizado na bandeja."
+      : "PokeMngr abrirá a janela principal ao iniciar.";
+    setGs(nextGs);
+    try {
+      await api.updateSettings(nextGs);
+      onSettingsChange(nextGs);
+      onToast(okMsg);
+    } catch (e) {
+      setGs(gs);
+      onToast(`Erro ao salvar início minimizado: ${String(e)}`);
+    }
+  };
+
   const handleToggleHuntExt = async (checked: boolean) => {
     setHuntBusy(true);
     try {
@@ -958,21 +990,26 @@ export function SettingsView({
                 />
                 Iniciar automaticamente com o Windows
               </label>
-              <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={gs.minimizeToTrayOnClose}
-                  onChange={(e) =>
-                    setGs({ ...gs, minimizeToTrayOnClose: e.target.checked })
-                  }
-                />
-                Ao clicar no X, minimizar para a bandeja do sistema (continuar farmando)
-              </label>
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={gs.minimizeToTrayOnClose}
+                    onChange={(e) => handleToggleMinimizeToTray(e.target.checked)}
+                  />
+                  Minimizar para a bandeja ao clicar no X (padrão)
+                </label>
+                <p className="text-[11px] text-slate-400 pl-5">
+                  {gs.minimizeToTrayOnClose
+                    ? "Mantém o launcher na bandeja do sistema e as contas farmando em segundo plano."
+                    : "Fecha o launcher completamente ao clicar no X, encerrando todos os processos em segundo plano."}
+                </p>
+              </div>
               <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={gs.startMinimized}
-                  onChange={(e) => setGs({ ...gs, startMinimized: e.target.checked })}
+                  onChange={(e) => handleToggleStartMinimized(e.target.checked)}
                 />
                 Iniciar minimizado na bandeja
               </label>
