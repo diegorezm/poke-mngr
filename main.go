@@ -5,7 +5,9 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"os"
 	"sync/atomic"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -40,6 +42,28 @@ func main() {
 	var quitting atomic.Bool
 	var mainWin *application.WebviewWindow
 	var tray *application.SystemTray
+	isDev := os.Getenv("FRONTEND_DEVSERVER_URL") != ""
+
+	showMain := func() {
+		if mainWin == nil {
+			return
+		}
+		mainWin.Show()
+		if mainWin.IsMinimised() {
+			mainWin.UnMinimise()
+		}
+		mainWin.Focus()
+	}
+
+	var singleInstance *application.SingleInstanceOptions
+	if !isDev {
+		singleInstance = &application.SingleInstanceOptions{
+			UniqueID: "com.pokemngr.desktop.v1",
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				showMain()
+			},
+		}
+	}
 
 	app := application.New(application.Options{
 		Name:        "PokeMngr",
@@ -51,21 +75,12 @@ func main() {
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
-		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "com.pokemngr.desktop.v1",
-			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				if mainWin != nil {
-					mainWin.Show()
-					mainWin.UnMinimise()
-					mainWin.Focus()
-				}
-			},
-		},
+		SingleInstance: singleInstance,
 		Windows: application.WindowsOptions{
-			DisableQuitOnLastWindowClosed: true,
+			DisableQuitOnLastWindowClosed: !isDev,
 		},
 		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: false,
+			ApplicationShouldTerminateAfterLastWindowClosed: isDev,
 		},
 		OnShutdown: func() {
 			appSvc.CloseAllGameWindows()
@@ -75,6 +90,7 @@ func main() {
 	appSvc.BindApp(app)
 
 	gs := mgr.Settings()
+	startHidden := !isDev && gs.StartMinimized
 	mainWin = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            "PokeMngr — PokéIdle Desktop",
@@ -82,14 +98,20 @@ func main() {
 		Height:           820,
 		MinWidth:         900,
 		MinHeight:        600,
-		Hidden:           gs.StartMinimized,
+		Hidden:           startHidden,
 		BackgroundColour: application.NewRGB(9, 11, 20),
 		URL:              "/",
 	})
 
-	// Hide to system tray instead of exiting when user clicks the X button
+	// Hide to system tray instead of exiting when user clicks the X button (production only;
+	// in `task dev` closing the window quits cleanly so no orphan process lingers in the tray).
 	mainWin.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		if quitting.Load() {
+			return
+		}
+		if isDev {
+			quitting.Store(true)
+			app.Quit()
 			return
 		}
 		if mgr.Settings().MinimizeToTrayOnClose {
@@ -98,19 +120,23 @@ func main() {
 		}
 	})
 
+	// Safety net: if WebView2 delays NavigationCompleted on Windows, force-show the main window
+	// so the app never gets stuck showing only the tray icon.
+	if !startHidden {
+		app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(_ *application.ApplicationEvent) {
+			go func() {
+				time.Sleep(2 * time.Second)
+				if mainWin != nil && !mainWin.IsVisible() && !quitting.Load() {
+					showMain()
+				}
+			}()
+		})
+	}
+
 	// System Tray setup
 	tray = app.SystemTray.New()
 	tray.SetIcon(trayIcon)
 	tray.SetTooltip("PokeMngr — Iniciando...")
-
-	showMain := func() {
-		if mainWin == nil {
-			return
-		}
-		mainWin.Show()
-		mainWin.UnMinimise()
-		mainWin.Focus()
-	}
 
 	trayMenu := app.NewMenu()
 	trayMenu.Add("Abrir Painel").OnClick(func(_ *application.Context) {
