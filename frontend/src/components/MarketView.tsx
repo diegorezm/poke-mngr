@@ -14,17 +14,26 @@ import {
   Search,
   BarChart3,
   X,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Loader2,
 } from "lucide-react";
 import {
   AccountTelemetry,
   GlobalSettings,
+  ListingDetail,
   MarketLogEntry,
   MarketRule,
+  PokemonDetail,
   fmtCompact,
 } from "../lib/types";
+import { TYPES } from "../lib/gameData";
 import { api } from "../lib/api";
 import { ItemSprite, PokemonSprite } from "./PokemonSprite";
-import { DsConfirmDialog, DsDialog } from "./DsPrimitives";
+import { DsConfirmDialog, DsDialog, DsTypeBadge } from "./DsPrimitives";
+import { GRADE_PILL_BG, PokemonSheetModal } from "./PokemonSheetModal";
 import {
   InflationChart,
   InflationPoint,
@@ -57,6 +66,104 @@ function isSniperEnabled(ov: Record<string, unknown> | null): boolean {
 
 function extractRows(res: Record<string, unknown>): Record<string, unknown>[] {
   return (res.linhas as Record<string, unknown>[]) || [];
+}
+
+function extractVitrinePageResult(res: Record<string, unknown>) {
+  const rows = extractRows(res);
+  return {
+    rows,
+    total: Number(res.total || rows.length),
+    perPage: Number(res.porPagina || 24),
+  };
+}
+
+interface VitrineCardData {
+  id: number;
+  name: string;
+  level: number;
+  looktype: number;
+  shiny: boolean;
+  types: string[];
+  potency: number;
+  quality: number;
+  ivSoma: number;
+  nota: number;
+  faixa: string;
+  tmElemental: string;
+  tmAoe: boolean;
+  seller: string;
+  price: number;
+  moeda: string;
+  detail: PokemonDetail | null;
+  raw: Record<string, unknown>;
+}
+
+function extractVitrineCard(ad: Record<string, unknown>, fallbackMoeda: string): VitrineCardData {
+  const detail = (ad.pokemonDetail as PokemonDetail | undefined) || null;
+  const ficha =
+    (ad.ficha as Record<string, unknown> | undefined) ||
+    (ad.pokemon as Record<string, unknown> | undefined) ||
+    ad;
+  const shiny = detail ? detail.shiny : Boolean(ficha.shiny || ad.shiny);
+  const look =
+    (detail ? detail.looktype : 0) ||
+    Number((shiny && ficha.lookShiny ? ficha.lookShiny : ficha.looktype) || ad.looktype || 0);
+  const name =
+    (detail ? detail.apelido || detail.nome : "") ||
+    String(ficha.nome || ficha.especie || ad.nome || "Pokémon");
+  const level =
+    (detail ? detail.level : 0) || Number(ficha.level || ficha.nivel || ad.level || 0);
+  const types =
+    detail && Array.isArray(detail.tipos) && detail.tipos.length > 0
+      ? detail.tipos
+      : Array.isArray(ad.tipos)
+      ? (ad.tipos as string[])
+      : [];
+  const potency = (detail ? detail.potencia : 0) || Number(ficha.potencia || 0);
+  const quality =
+    (detail ? detail.qualidade : 0) || Number(ficha.quality || ficha.qualidade || 0);
+  const ivSoma = (detail ? detail.ivSoma : 0) || Number(ficha.ivTotal || 0);
+  const nota = detail ? detail.nota : 0;
+  const faixa = detail ? detail.faixa : "";
+  const tmElemental = String(ad.tmElemental || ficha.tmElemental || "");
+  const tmAoe = Boolean(ad.tmAoe || ficha.tmAoe);
+  const seller = String(ad.vendedor || "?");
+  const price = Number(ad.preco || 0);
+  const moedaVal = String(ad.moeda || fallbackMoeda);
+  return {
+    id: Number(ad.id || 0),
+    name,
+    level,
+    looktype: look,
+    shiny,
+    types,
+    potency,
+    quality,
+    ivSoma,
+    nota,
+    faixa,
+    tmElemental,
+    tmAoe,
+    seller,
+    price,
+    moeda: moedaVal,
+    detail,
+    raw: ad,
+  };
+}
+
+function buildListingFromVitrine(card: VitrineCardData): ListingDetail {
+  return {
+    id: card.id,
+    kind: "pokemon",
+    nome: card.name,
+    qtd: 1,
+    preco: card.price,
+    moeda: card.moeda === "orb" ? "orb" : "gold",
+    vendedor: card.seller,
+    estado: "aberto",
+    pokemon: card.detail || undefined,
+  };
 }
 
 function parseInflation(stats: Record<string, unknown> | null, moeda: "gold" | "orb"): InflationPoint[] {
@@ -176,8 +283,18 @@ export function MarketView({
 
   // Vitrine
   const [vitrineQuery, setVitrineQuery] = useState("");
+  const [vitrineOrder, setVitrineOrder] = useState<"baratos" | "recentes" | "caros">("baratos");
+  const [vitrineElement, setVitrineElement] = useState("");
   const [vitrineShiny, setVitrineShiny] = useState(false);
+  const [vitrineP5, setVitrineP5] = useState(false);
+  const [vitrineZMove, setVitrineZMove] = useState(false);
+  const [vitrineAoe, setVitrineAoe] = useState(false);
+  const [vitrinePage, setVitrinePage] = useState(0);
+  const [vitrineTotal, setVitrineTotal] = useState(0);
+  const [vitrinePerPage, setVitrinePerPage] = useState(24);
+  const [vitrineLoading, setVitrineLoading] = useState(false);
   const [vitrineRows, setVitrineRows] = useState<Record<string, unknown>[]>([]);
+  const [inspectedVitrine, setInspectedVitrine] = useState<VitrineCardData | null>(null);
 
   // Tape
   const [tapeMode, setTapeMode] = useState<"global" | "sales" | "buys">("global");
@@ -264,18 +381,42 @@ export function MarketView({
     loadRules();
   }, [onlineAccounts.length]);
 
+  const loadVitrine = async (pageOverride?: number) => {
+    if (!activeBuyer) return;
+    const targetPage = pageOverride !== undefined ? pageOverride : vitrinePage;
+    const filters = {
+      tipo: "pokemon",
+      moeda,
+      ordem: vitrineOrder,
+      busca: vitrineQuery.trim(),
+      elemento: vitrineElement,
+      soShiny: vitrineShiny,
+      soP5: vitrineP5,
+      soTmElemental: vitrineZMove,
+      soTmAoe: vitrineAoe,
+      pagina: targetPage,
+    };
+    const buyerIdNow = activeBuyer.id;
+    setVitrineLoading(true);
+    try {
+      const res = await api.getMarketVitrine(filters, buyerIdNow);
+      const parsed = extractVitrinePageResult(res);
+      setVitrineRows(parsed.rows);
+      setVitrineTotal(parsed.total);
+      setVitrinePerPage(parsed.perPage);
+      setVitrinePage(targetPage);
+    } catch (e) {
+      onToast(`Vitrine: ${String(e)}`);
+    }
+    setVitrineLoading(false);
+  };
+
   useEffect(() => {
     if (sub === "vitrine" && activeBuyer) {
-      api
-        .getMarketVitrine(
-          { moeda, busca: vitrineQuery, soShiny: vitrineShiny, pagina: 1 },
-          activeBuyer.id
-        )
-        .then((res) => setVitrineRows((res.linhas as Record<string, unknown>[]) || []))
-        .catch(() => {});
+      loadVitrine(0);
     } else if (sub === "tape" && activeBuyer) {
       api
-        .getMarketTape(tapeMode, 1, activeBuyer.id)
+        .getMarketTape(tapeMode, 0, activeBuyer.id)
         .then((res) => setTapeRows((res.linhas as Record<string, unknown>[]) || []))
         .catch(() => {});
     } else if (sub === "stats") {
@@ -293,7 +434,7 @@ export function MarketView({
         .then(setWallet)
         .catch(() => {});
     }
-  }, [sub, moeda, tapeMode, guideDays, activeBuyer?.id]);
+  }, [sub, moeda, tapeMode, guideDays, vitrineOrder, vitrineElement, vitrineShiny, vitrineP5, vitrineZMove, vitrineAoe, activeBuyer?.id]);
 
   const itemsMeta = (overview?.itemsMeta as Record<string, ItemMetaEntry>) || {};
 
@@ -449,7 +590,7 @@ export function MarketView({
   return (
     <div className="space-y-4">
       {/* Header Controls */}
-      <div className="rounded-2xl bg-[#111525] border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-box p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 flex-wrap text-xs">
           {(
             [
@@ -464,10 +605,8 @@ export function MarketView({
             <button
               key={id}
               onClick={() => setSub(id)}
-              className={`px-3 py-1.5 rounded-xl font-medium border transition ${
-                sub === id
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                  : "bg-[#0b0e1b] text-slate-400 border-slate-800 hover:text-white"
+              className={`ds-btn ds-btn-sm ${
+                sub === id ? "ds-btn-red" : "ds-btn-slate"
               }`}
             >
               {label}
@@ -479,7 +618,7 @@ export function MarketView({
           <select
             value={moeda}
             onChange={(e) => setMoeda(e.target.value as "gold" | "orb")}
-            className="rounded-lg bg-[#0b0e1b] border border-slate-700 px-2.5 py-1.5 text-white"
+            className="ds-input px-2.5 py-1.5 text-xs font-semibold"
           >
             <option value="gold">Ouro (Gold)</option>
             <option value="orb">Gemas (Orbs)</option>
@@ -487,7 +626,7 @@ export function MarketView({
           <select
             value={activeBuyer?.id || 0}
             onChange={(e) => setBuyerId(Number(e.target.value))}
-            className="rounded-lg bg-[#0b0e1b] border border-slate-700 px-2.5 py-1.5 text-slate-200"
+            className="ds-input px-2.5 py-1.5 text-xs font-semibold"
           >
             {onlineAccounts.length === 0 ? (
               <option value={0}>Sem conta online</option>
@@ -502,7 +641,7 @@ export function MarketView({
           <button
             disabled={loading}
             onClick={loadOverview}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200"
+            className="ds-btn ds-btn-slate ds-btn-sm !px-2.5"
             title="Atualizar mercado"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -513,59 +652,65 @@ export function MarketView({
       {/* Prices Tab */}
       {sub === "prices" && (
         <div className="space-y-3">
-          <div className="relative max-w-xs">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative max-w-sm">
+            <Search className="w-3.5 h-3.5 text-[var(--ink-muted)] absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filtrar item ou ID..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[#111525] border border-slate-700 text-xs text-white"
+              className="ds-input w-full pl-8 pr-3 py-2 text-xs font-medium"
             />
           </div>
 
-          <div className="rounded-2xl bg-[#111525] border border-slate-800 overflow-hidden">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-[#0d101d] text-slate-400 border-b border-slate-800">
+          <div className="px-box overflow-hidden">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-[var(--panel-alt)] text-[var(--ink-muted)] border-b border-[var(--border-mid)] text-xs uppercase tracking-wider font-bold">
                 <tr>
-                  <th className="px-3 py-2.5">Item</th>
-                  <th className="px-3 py-2.5">Menor Preço</th>
-                  <th className="px-3 py-2.5">Média 7d</th>
-                  <th className="px-3 py-2.5">Anúncios</th>
-                  <th className="px-3 py-2.5 text-right">Ação</th>
+                  <th className="px-4 py-3">Item</th>
+                  <th className="px-4 py-3">Menor Preço</th>
+                  <th className="px-4 py-3">Média 7d</th>
+                  <th className="px-4 py-3">Anúncios</th>
+                  <th className="px-4 py-3 text-right">Ação</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/70">
+              <tbody className="divide-y divide-[var(--border-soft)]">
                 {itemRows.slice(0, 80).map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-800/30">
-                    <td className="px-3 py-2 flex items-center gap-2.5">
+                  <tr key={row.id} className="hover:bg-[var(--panel-alt)] transition">
+                    <td className="px-4 py-3 flex items-center gap-3">
                       <button
                         onClick={() => api.toggleMarketFav(row.id).then(loadOverview)}
-                        className={row.fav ? "text-amber-400" : "text-slate-600 hover:text-slate-400"}
+                        className={`cursor-pointer ${
+                          row.fav
+                            ? "text-[var(--ink-accent-amber)]"
+                            : "text-[var(--ink-subtle)] hover:text-[var(--ink)]"
+                        }`}
                       >
-                        <Star className="w-3.5 h-3.5" />
+                        <Star className="w-4 h-4" />
                       </button>
-                      <ItemSprite icon={row.icon} size={26} alt={row.name} />
-                      <span className="font-medium text-white">{row.name}</span>
-                      <span className="text-[10px] text-slate-500 font-mono">#{row.id}</span>
+                      <ItemSprite icon={row.icon} size={32} alt={row.name} />
+                      <span className="font-bold text-[var(--ink)]">{row.name}</span>
+                      <span className="text-[11px] text-[var(--ink-subtle)] font-mono-num">
+                        #{row.id}
+                      </span>
                       {row.pctDiff <= -10 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
+                        <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/15 text-[var(--ink-accent-green)] border border-emerald-500/30 font-bold">
                           Barato {row.pctDiff.toFixed(0)}%
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-amber-300 font-semibold">
+                    <td className="px-4 py-3 font-mono-num text-[var(--ink-accent-amber)] font-bold">
                       {fmtCompact(row.min)}
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-slate-400">
+                    <td className="px-4 py-3 font-mono-num text-[var(--ink-muted)]">
                       {row.avg > 0 ? fmtCompact(row.avg) : "—"}
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-slate-300">
+                    <td className="px-4 py-3 font-mono-num text-[var(--ink-muted)] text-xs">
                       {row.ads} ({fmtCompact(row.units)} un)
                     </td>
-                    <td className="px-3 py-2.5 text-right">
+                    <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => handleOpenItem(row.id)}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-500/30"
+                        className="ds-btn ds-btn-blue ds-btn-sm"
                       >
                         Ver anúncios
                       </button>
@@ -578,81 +723,266 @@ export function MarketView({
         </div>
       )}
 
-      {/* Vitrine Tab */}
+      {/* Vitrine Tab (Pokédex Card Grid matching Mapa/Hunts) */}
       {sub === "vitrine" && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 flex-wrap text-xs">
-            <input
-              value={vitrineQuery}
-              onChange={(e) => setVitrineQuery(e.target.value)}
-              placeholder="Buscar Pokémon..."
-              className="rounded-lg bg-[#111525] border border-slate-700 px-3 py-1.5 text-white"
-            />
-            <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#111525] border border-slate-800">
-              <input
-                type="checkbox"
-                checked={vitrineShiny}
-                onChange={(e) => setVitrineShiny(e.target.checked)}
-              />
-              Só Shiny
-            </label>
-            <button
-              onClick={() =>
-                activeBuyer &&
-                api
-                  .getMarketVitrine(
-                    { moeda, busca: vitrineQuery, soShiny: vitrineShiny, pagina: 1 },
-                    activeBuyer.id
-                  )
-                  .then((res) => setVitrineRows((res.linhas as Record<string, unknown>[]) || []))
-              }
-              className="px-3 py-1.5 rounded-lg bg-indigo-500 text-white font-semibold"
-            >
-              Pesquisar
-            </button>
+        <div className="space-y-4">
+          <div className="px-box p-4 space-y-3">
+            <div className="flex items-center gap-2.5 flex-wrap text-xs">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="w-3.5 h-3.5 text-[var(--ink-muted)] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  value={vitrineQuery}
+                  onChange={(e) => setVitrineQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") loadVitrine(0);
+                  }}
+                  placeholder="Buscar espécie (ex.: Charizard, Gengar)..."
+                  className="ds-input w-full pl-8 pr-3 py-2 text-xs font-medium"
+                />
+              </div>
+
+              <select
+                value={vitrineOrder}
+                onChange={(e) =>
+                  setVitrineOrder(e.target.value as "baratos" | "recentes" | "caros")
+                }
+                className="ds-input px-2.5 py-2 text-xs font-semibold"
+              >
+                <option value="baratos">Mais baratos</option>
+                <option value="recentes">Mais recentes</option>
+                <option value="caros">Mais caros</option>
+              </select>
+
+              <select
+                value={vitrineElement}
+                onChange={(e) => setVitrineElement(e.target.value)}
+                className="ds-input px-2.5 py-2 text-xs font-semibold"
+              >
+                <option value="">Todos os tipos</option>
+                {TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                disabled={vitrineLoading || !activeBuyer}
+                onClick={() => loadVitrine(0)}
+                className="ds-btn ds-btn-blue"
+              >
+                {vitrineLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Search className="w-3.5 h-3.5" />
+                )}
+                Pesquisar
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="px-inset px-2.5 py-1.5 inline-flex items-center gap-1.5 font-semibold text-[var(--ink)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={vitrineShiny}
+                    onChange={(e) => setVitrineShiny(e.target.checked)}
+                  />
+                  <Sparkles className="w-3.5 h-3.5 text-[var(--ink-accent-amber)]" /> Só Shiny
+                </label>
+                <label className="px-inset px-2.5 py-1.5 inline-flex items-center gap-1.5 font-semibold text-[var(--ink)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={vitrineP5}
+                    onChange={(e) => setVitrineP5(e.target.checked)}
+                  />
+                  Só P5
+                </label>
+                <label className="px-inset px-2.5 py-1.5 inline-flex items-center gap-1.5 font-semibold text-[var(--ink)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={vitrineZMove}
+                    onChange={(e) => setVitrineZMove(e.target.checked)}
+                  />
+                  Z-Move
+                </label>
+                <label className="px-inset px-2.5 py-1.5 inline-flex items-center gap-1.5 font-semibold text-[var(--ink)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={vitrineAoe}
+                    onChange={(e) => setVitrineAoe(e.target.checked)}
+                  />
+                  TM AoE
+                </label>
+              </div>
+
+              <span className="font-mono-num text-[11px] font-semibold text-[var(--ink-muted)]">
+                {vitrineTotal > 0
+                  ? `${vitrineTotal.toLocaleString("pt-BR")} Pokémon à venda · Página ${vitrinePage + 1}`
+                  : "Clique em qualquer Pokémon para abrir a ficha completa"}
+              </span>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {vitrineRows.map((ad, idx) => {
-              const pk = (ad.pokemon as Record<string, unknown>) || ad;
-              const look = Number(
-                (pk.shiny && pk.lookShiny ? pk.lookShiny : pk.looktype) || ad.looktype || 0
-              );
-              return (
-                <div
-                  key={String(ad.id || idx)}
-                  className="rounded-xl bg-[#111525] border border-slate-800 p-3 flex items-center justify-between gap-2 text-xs"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <PokemonSprite
-                      looktype={look}
-                      bridgePort={bridgePort}
-                      size={44}
-                      shiny={Boolean(pk.shiny || ad.shiny)}
-                      className="rounded-lg bg-[#090c18] border border-slate-800"
-                    />
-                    <div className="min-w-0">
-                      <div className="font-semibold text-white truncate">
-                        {String(ad.nome || pk.nome || pk.especie || "Pokémon")}{" "}
-                        {pk.shiny || ad.shiny ? "✨" : ""}
+
+          {vitrineLoading && vitrineRows.length === 0 ? (
+            <div className="px-box p-8 text-center text-xs text-[var(--ink-muted)] font-medium flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-[var(--dex-red)]" />
+              Carregando vitrine de Pokémon...
+            </div>
+          ) : vitrineRows.length === 0 ? (
+            <div className="px-box p-8 text-center text-xs text-[var(--ink-muted)] font-medium">
+              {activeBuyer
+                ? "Nenhum Pokémon encontrado com esses filtros."
+                : "Conecte pelo menos 1 conta para consultar a Vitrine Pokémon."}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                {vitrineRows.map((ad, idx) => {
+                  const card = extractVitrineCard(ad, moeda);
+                  const gradeBg = GRADE_PILL_BG[card.faixa] || "bg-slate-600";
+                  const moedaLabel = card.moeda === "orb" ? "Gemas" : "Gold";
+                  return (
+                    <div
+                      key={String(card.id || idx)}
+                      onClick={() => card.detail && setInspectedVitrine(card)}
+                      className={`dex-row px-4 py-3 flex items-center justify-between gap-3 cursor-pointer ${
+                        card.shiny ? "!border-amber-500/70 bg-amber-500/[0.04]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <PokemonSprite
+                          looktype={card.looktype}
+                          bridgePort={bridgePort}
+                          size={62}
+                          shiny={card.shiny}
+                          className="px-stage shrink-0"
+                        />
+
+                        <div className="min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-[15px] text-[var(--ink)] truncate">
+                              {card.name}
+                            </span>
+                            <span className="font-mono-num text-[11px] font-bold bg-[#1b1f26] text-[#fde047] px-2 py-0.5 rounded">
+                              Lv.{card.level}
+                            </span>
+                            {card.faixa && (
+                              <span
+                                className={`font-mono-num text-[10px] font-bold uppercase px-1.5 py-0.5 rounded text-white ${gradeBg}`}
+                              >
+                                {card.faixa}
+                              </span>
+                            )}
+                            {card.potency > 0 && (
+                              <span className="font-mono-num text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-600/90 text-white">
+                                P{card.potency}
+                              </span>
+                            )}
+                            {card.shiny && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500 text-slate-950">
+                                ✨ Shiny
+                              </span>
+                            )}
+                            {card.tmElemental && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-fuchsia-600 text-white">
+                                Z-Move
+                              </span>
+                            )}
+                            {card.tmAoe && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-600 text-white">
+                                AoE
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {card.types.slice(0, 2).map((t) => (
+                              <DsTypeBadge key={t} type={t} />
+                            ))}
+                            {card.ivSoma > 0 && (
+                              <span className="font-mono-num text-[11px] font-semibold text-[var(--ink-muted)]">
+                                IV <b className="text-[var(--ink)]">{card.ivSoma}/192</b>
+                              </span>
+                            )}
+                            {card.nota > 0 && (
+                              <span className="font-mono-num text-[11px] font-semibold text-[var(--ink-muted)]">
+                                · Nota <b className="text-[var(--ink)]">{card.nota.toFixed(1)}</b>
+                              </span>
+                            )}
+                            <span className="text-[11px] text-[var(--ink-subtle)] truncate">
+                              · {card.seller}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-slate-400 truncate">
-                        Lv {Number(pk.level || ad.level || 0)} · {String(ad.vendedor || "?")}
-                      </div>
-                      <div className="font-mono text-amber-300 font-bold mt-0.5">
-                        {fmtCompact(Number(ad.preco || 0))} {moeda}
+
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <div className="text-right">
+                          <div className="font-mono-num text-base font-extrabold text-[var(--ink-accent-amber)] leading-tight">
+                            {fmtCompact(card.price)}
+                          </div>
+                          <div className="text-[10px] font-semibold text-[var(--ink-subtle)]">
+                            {moedaLabel}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5">
+                          {card.detail && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setInspectedVitrine(card);
+                              }}
+                              title="Ver ficha completa"
+                              className="ds-btn ds-btn-slate ds-btn-sm !px-2.5"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBuy(card.raw);
+                            }}
+                            className="ds-btn ds-btn-green ds-btn-sm"
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5" /> Comprar
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  );
+                })}
+              </div>
+
+              {/* Pagination Controls */}
+              {vitrineTotal > vitrinePerPage && (
+                <div className="flex items-center justify-between gap-2 pt-1 text-xs">
                   <button
-                    onClick={() => handleBuy(ad)}
-                    className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/30 inline-flex items-center gap-1 shrink-0"
+                    disabled={vitrinePage <= 0 || vitrineLoading}
+                    onClick={() => loadVitrine(Math.max(0, vitrinePage - 1))}
+                    className="ds-btn ds-btn-slate ds-btn-sm"
                   >
-                    <ShoppingCart className="w-3.5 h-3.5" /> Comprar
+                    <ChevronLeft className="w-3.5 h-3.5" /> Anterior
+                  </button>
+                  <span className="font-mono-num font-bold text-[var(--ink-muted)]">
+                    Página {vitrinePage + 1} de{" "}
+                    {Math.max(1, Math.ceil(vitrineTotal / Math.max(1, vitrinePerPage)))}
+                  </span>
+                  <button
+                    disabled={
+                      (vitrinePage + 1) * vitrinePerPage >= vitrineTotal || vitrineLoading
+                    }
+                    onClick={() => loadVitrine(vitrinePage + 1)}
+                    className="ds-btn ds-btn-slate ds-btn-sm"
+                  >
+                    Próxima <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -1316,6 +1646,21 @@ export function MarketView({
           </div>
         )}
       </DsDialog>
+
+      {inspectedVitrine && inspectedVitrine.detail && (
+        <PokemonSheetModal
+          sheet={inspectedVitrine.detail}
+          bridgePort={bridgePort}
+          listing={buildListingFromVitrine(inspectedVitrine)}
+          buying={buyingMarket}
+          onBuy={() => {
+            const raw = inspectedVitrine.raw;
+            setInspectedVitrine(null);
+            handleBuy(raw);
+          }}
+          onClose={() => setInspectedVitrine(null)}
+        />
+      )}
 
       <DsConfirmDialog
         open={Boolean(pendingBuy)}

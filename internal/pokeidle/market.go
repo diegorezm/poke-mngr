@@ -306,10 +306,23 @@ func (mc *MarketClient) QueryItemListings(ctx context.Context, itemID int, moeda
 
 func (mc *MarketClient) QueryVitrine(ctx context.Context, filters map[string]any) (map[string]any, error) {
 	req := map[string]any{
-		"t":      "market.listar",
-		"tipo":   "pokemon",
-		"moeda":  "gold",
-		"pagina": 1,
+		"t":             "market.listar",
+		"tipo":          "pokemon",
+		"moeda":         "gold",
+		"busca":         "",
+		"ordem":         "baratos",
+		"criterios":     []any{},
+		"elemento":      "",
+		"categoria":     "",
+		"soShiny":       false,
+		"soP5":          false,
+		"soTmElemental": false,
+		"soTmAoe":       false,
+		"ivMin":         "",
+		"potenciaMin":   "",
+		"qualidadeMin":  "",
+		"nivelMin":      "",
+		"pagina":        0,
 	}
 	for k, v := range filters {
 		req[k] = v
@@ -610,7 +623,56 @@ func (ms *MarketService) Vitrine(ctx context.Context, filters map[string]any, ac
 	if conn == nil {
 		return nil, errors.New("nenhuma conta online")
 	}
-	return conn.market.QueryVitrine(ctx, filters)
+	res, err := conn.market.QueryVitrine(ctx, filters)
+	if err != nil {
+		return nil, err
+	}
+	ms.mgr.creatures.EnsureLoaded(ctx)
+
+	out := deepCloneMap(res)
+	rawRows := asSlice(out["linhas"])
+	for _, raw := range rawRows {
+		ad := asMap(raw)
+		if ad == nil {
+			continue
+		}
+		ficha := asMap(ad["ficha"])
+		if ficha == nil {
+			ficha = asMap(ad["pokemon"])
+		}
+		pkSrc := ficha
+		if pkSrc == nil {
+			pkSrc = ad
+		}
+		cloned := deepCloneMap(pkSrc)
+		if asInt(cloned["id"]) == 0 {
+			if pid := asInt(ad["pokemonId"]); pid > 0 {
+				cloned["id"] = pid
+			}
+		}
+		seller := asString(ad["vendedor"])
+		pkDet := BuildPokemonDetailWithCatalog(0, seller, 0, cloned, ms.mgr.creatures)
+		pkDet.Owner = seller
+
+		ad["pokemonDetail"] = pkDet
+		if asString(ad["nome"]) == "" && pkDet.Name != "" {
+			ad["nome"] = pkDet.Name
+		}
+		if asInt(ad["level"]) == 0 && pkDet.Level > 0 {
+			ad["level"] = pkDet.Level
+		}
+		if asInt(ad["looktype"]) == 0 && pkDet.Looktype > 0 {
+			ad["looktype"] = pkDet.Looktype
+		}
+		ad["shiny"] = pkDet.Shiny
+		ad["tipos"] = pkDet.Types
+		ad["tmElemental"] = asString(pkSrc["tmElemental"])
+		if ad["tmElemental"] == "" {
+			ad["tmElemental"] = asString(ad["tmElemental"])
+		}
+		ad["tmAoe"] = asBool(pkSrc["tmAoe"]) || asBool(ad["tmAoe"])
+	}
+	return out, nil
 }
 
 func (ms *MarketService) Tape(ctx context.Context, mode string, page int, accID int) (map[string]any, error) {
@@ -1384,6 +1446,11 @@ func (ms *MarketService) tickRules(ctx context.Context) {
 			}
 
 			adName := asString(ad["nome"])
+			if adName == "" {
+				if ficha := asMap(ad["ficha"]); ficha != nil {
+					adName = asString(ficha["nome"])
+				}
+			}
 			if adName == "" {
 				if pk := asMap(ad["pokemon"]); pk != nil {
 					adName = asString(pk["nome"])
