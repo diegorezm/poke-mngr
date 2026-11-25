@@ -79,7 +79,7 @@ export function PassView({
   const st = computePassState(acc.pass.raw, serverTimeMs + (acc.serverOffsetMs || 0));
 
   return (
-    <div className="space-y-4 max-w-5xl">
+    <div className="space-y-4">
       {/* Header */}
       <div className="rounded-2xl bg-[#111525] border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">

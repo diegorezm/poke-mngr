@@ -379,12 +379,12 @@ export function InventoryView({
         </div>
       ) : (
         /* PC Box Pokémons Grid */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 animate-ds-tab">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 animate-ds-tab">
           {filteredPks.slice(0, 120).map((pk) => (
             <button
               key={`${pk.accountId}-${pk.id}`}
               onClick={() => setSheet(pk)}
-              className={`group text-left px-box p-3 flex items-center gap-3 transition-all hover:-translate-y-0.5 hover:border-[var(--dex-red)] cursor-pointer ${
+              className={`group text-left px-box p-3.5 flex items-center gap-3.5 transition-all hover:-translate-y-0.5 hover:border-[var(--dex-red)] cursor-pointer ${
                 pk.shiny ? "!border-amber-500 ring-2 ring-amber-400/40" : ""
               }`}
             >
@@ -393,17 +393,17 @@ export function InventoryView({
                   <PokemonSprite
                     looktype={pk.looktype}
                     bridgePort={bridgePort}
-                    size={54}
+                    size={58}
                     shiny={pk.shiny}
                   />
                 </div>
               </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="font-pixel text-[11px] text-[var(--ink)] truncate">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="font-bold text-sm text-[var(--ink)] truncate">
                     {pk.apelido || pk.nome}
                   </span>
-                  <span className="font-pixel text-[9px] bg-[#2f3842] text-[#ffd84a] px-1.5 py-0.5 rounded shrink-0">
+                  <span className="font-mono-num text-[11px] font-bold bg-[#1b1f26] text-[#fde047] px-2 py-0.5 rounded shrink-0">
                     Lv.{pk.level}
                   </span>
                 </div>

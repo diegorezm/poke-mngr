@@ -310,6 +310,10 @@ export interface PokemonDetail {
   ivSoma: number;
   ivPct: number;
   stats: Record<string, number>;
+  baseStats?: Record<string, number>;
+  refino?: Record<string, number>;
+  tmElemental?: string;
+  tmAoe?: boolean;
   tipos: string[];
   nota: number;
   faixa: string;
@@ -509,20 +513,20 @@ export interface LivesCentralState {
 }
 
 export const POTION_OPTIONS = [
-  { id: 200, name: "Small Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/small_potion.png" },
-  { id: 201, name: "Great Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/great_potion.png" },
-  { id: 202, name: "Ultra Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/ultra_potion.png" },
-  { id: 203, name: "Hyper Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/hyper_potion.png" },
-  { id: 204, name: "Ultimate Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/ultimate_potion.png" },
   { id: 70070, name: "Golden Potion", icon: "https://pokeidle.io/img/itens/golden-potion.png" },
+  { id: 204, name: "Ultimate Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/ultimate_potion.png" },
+  { id: 203, name: "Hyper Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/hyper_potion.png" },
+  { id: 202, name: "Ultra Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/ultra_potion.png" },
+  { id: 201, name: "Great Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/great_potion.png" },
+  { id: 200, name: "Small Potion", icon: "https://pokeidle.io/assets/site/assets/markitems/small_potion.png" },
 ];
 
 export const BALL_OPTIONS = [
-  { id: 1, name: "Poké Ball", icon: "https://pokeidle.io/assets/site/assets/ui/ball-poke.png" },
-  { id: 2, name: "Great Ball", icon: "https://pokeidle.io/assets/site/assets/ui/ball-great.png" },
-  { id: 3, name: "Super Ball", icon: "https://pokeidle.io/img/ball-super.png" },
-  { id: 4, name: "Ultra Ball", icon: "https://pokeidle.io/assets/site/assets/ui/ball-ultra.png" },
   { id: 5, name: "Beast Ball", icon: "https://pokeidle.io/img/ball-beast.png" },
+  { id: 4, name: "Ultra Ball", icon: "https://pokeidle.io/assets/site/assets/ui/ball-ultra.png" },
+  { id: 3, name: "Super Ball", icon: "https://pokeidle.io/img/ball-super.png" },
+  { id: 2, name: "Great Ball", icon: "https://pokeidle.io/assets/site/assets/ui/ball-great.png" },
+  { id: 1, name: "Poké Ball", icon: "https://pokeidle.io/assets/site/assets/ui/ball-poke.png" },
 ];
 
 export const REVIVE_ICON = "https://pokeidle.io/assets/site/assets/markitems/revive.png";

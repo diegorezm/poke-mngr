@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from "@headlessui/react";
-import { X, Swords, Shield, Heart, Target, GitBranch, ShoppingCart } from "lucide-react";
+import { X, Swords, Shield, Heart, Target, GitBranch, ShoppingCart, Copy, Check } from "lucide-react";
 import { ListingDetail, PokemonDetail, fmtCompact } from "../lib/types";
+import { buildPokemonAIPrompt, copyTextToClipboard } from "../lib/pokemonPrompt";
 import { PokemonSprite } from "./PokemonSprite";
 import { DsBar, DsDialog, DsTypeBadge, MiniBall } from "./DsPrimitives";
 
@@ -17,7 +19,7 @@ export const GRADE_COLORS: Record<string, string> = {
   divino: "text-[#ca8a04]",
 };
 
-const GRADE_PILL_BG: Record<string, string> = {
+export const GRADE_PILL_BG: Record<string, string> = {
   "extremamente-fraco": "bg-slate-600",
   fraco: "bg-slate-600",
   mediano: "bg-blue-600",
@@ -30,13 +32,13 @@ const GRADE_PILL_BG: Record<string, string> = {
   divino: "bg-yellow-600",
 };
 
-const STAT_LABELS: [string, string][] = [
-  ["hp", "HP"],
-  ["atk", "Attack"],
-  ["def", "Defense"],
-  ["spAtk", "Sp. Atk"],
-  ["spDef", "Sp. Def"],
-  ["speed", "Speed"],
+const STAT_LABELS: [string, string, string][] = [
+  ["hp", "HP", "HP"],
+  ["atk", "Attack", "ATK"],
+  ["def", "Defense", "DEF"],
+  ["spAtk", "Sp. Atk", "SpA"],
+  ["spDef", "Sp. Def", "SpD"],
+  ["speed", "Speed", "SPD"],
 ];
 
 function rangeLabel(alcance: number): string {
@@ -50,6 +52,13 @@ function ivRankLabel(iv: number): string {
   if (iv >= 22) return "A";
   if (iv >= 14) return "B";
   return "C";
+}
+
+function hasAnyStats(stats: Record<string, number>): boolean {
+  for (const [k] of STAT_LABELS) {
+    if ((stats[k] || 0) > 0) return true;
+  }
+  return false;
 }
 
 export function PokemonSheetModal({
@@ -67,32 +76,61 @@ export function PokemonSheetModal({
   buying?: boolean;
   onClose: () => void;
 }) {
+  const [copiedAI, setCopiedAI] = useState(false);
+
   const ownerLabel = sheet.owner || sheet.accountNick || "?";
   const evolutions = sheet.evolucoes || [];
   const nextSteps = sheet.evoNext || [];
   const gradeBg = GRADE_PILL_BG[sheet.faixa] || "bg-slate-600";
 
+  const handleCopyForAI = async () => {
+    const markdown = buildPokemonAIPrompt(sheet, listing);
+    const ok = await copyTextToClipboard(markdown);
+    if (ok) {
+      setCopiedAI(true);
+      setTimeout(() => setCopiedAI(false), 2200);
+    }
+  };
+
   return (
-    <DsDialog open onClose={onClose} maxWidthClass="max-w-3xl">
+    <DsDialog open onClose={onClose} maxWidthClass="max-w-4xl">
       <div className="px-box overflow-hidden shadow-2xl">
         <TabGroup>
           {/* Pokédex Red Edition Top Bezel + Clean Tabs */}
-          <div className="bg-gradient-to-b from-[#e04338] to-[#c72d23] border-b-[1.5px] border-[#1b1f26] px-4 py-3 flex items-center justify-between gap-2 flex-wrap">
-            <div className="ds-ribbon-pill text-white">
+          <div className="bg-gradient-to-b from-[#e04338] to-[#c72d23] border-b-[1.5px] border-[#1b1f26] px-5 py-3.5 flex items-center justify-between gap-2 flex-wrap">
+            <div className="ds-ribbon-pill text-white text-sm">
               <MiniBall />
               <span>Ficha Pokédex · {sheet.apelido || sheet.nome}</span>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <TabList className="flex items-center gap-1.5">
                 <Tab className="skills-tab focus:outline-none">IVs &amp; Stats</Tab>
                 <Tab className="skills-tab focus:outline-none">Combate</Tab>
                 <Tab className="skills-tab focus:outline-none">Evoluções</Tab>
               </TabList>
               <button
+                type="button"
+                onClick={handleCopyForAI}
+                title="Copiar ficha completa em Markdown para colar em uma IA (ChatGPT, Claude, Gemini...)"
+                className={`ml-1 ds-btn ds-btn-sm ${
+                  copiedAI ? "ds-btn-green" : "ds-btn-slate"
+                }`}
+              >
+                {copiedAI ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" /> Copiado!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" /> Copiar p/ IA
+                  </>
+                )}
+              </button>
+              <button
                 onClick={onClose}
                 title="Fechar ficha"
-                className="ml-1 ds-btn ds-btn-slate ds-btn-sm !px-2"
+                className="ds-btn ds-btn-slate ds-btn-sm !px-2"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -100,26 +138,26 @@ export function PokemonSheetModal({
           </div>
 
           {/* 2-Column Body */}
-          <div className="grid grid-cols-1 md:grid-cols-[236px_1fr] bg-[var(--panel-bg)]">
+          <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] bg-[var(--panel-bg)]">
             {/* Left Sprite Stage */}
-            <div className="border-b md:border-b-0 md:border-r border-[var(--border-mid)] p-4 flex flex-col gap-3 bg-[var(--panel-alt)]">
+            <div className="border-b md:border-b-0 md:border-r border-[var(--border-mid)] p-5 flex flex-col gap-3.5 bg-[var(--panel-alt)]">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono-num text-xs font-bold bg-[#1b1f26] text-[#fde047] px-2 py-0.5 rounded">
+                <span className="font-mono-num text-xs font-bold bg-[#1b1f26] text-[#fde047] px-2.5 py-0.5 rounded">
                   Lv.{sheet.level}
                 </span>
                 <span
-                  className={`font-mono-num text-[10px] font-bold uppercase px-2 py-0.5 rounded text-white ${gradeBg}`}
+                  className={`font-mono-num text-[10px] font-bold uppercase px-2.5 py-0.5 rounded text-white ${gradeBg}`}
                 >
                   {sheet.faixa}
                 </span>
               </div>
 
-              <div className="px-stage flex-1 min-h-[176px] flex flex-col items-center justify-center gap-3 p-4">
+              <div className="px-stage flex-1 min-h-[196px] flex flex-col items-center justify-center gap-3 p-4">
                 <div className="animate-ds-idle">
                   <PokemonSprite
                     looktype={sheet.looktype}
                     bridgePort={bridgePort}
-                    size={110}
+                    size={124}
                     shiny={sheet.shiny}
                   />
                 </div>
@@ -130,7 +168,7 @@ export function PokemonSheetModal({
                 </div>
               </div>
 
-              <div className="px-box !shadow-none p-2.5 text-xs space-y-1">
+              <div className="px-box !shadow-none p-3 text-xs space-y-1">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink-subtle)]">
                   Treinador
                 </div>
@@ -144,16 +182,16 @@ export function PokemonSheetModal({
             </div>
 
             {/* Right Tab Panels */}
-            <div className="p-4 flex flex-col gap-3">
+            <div className="p-5 flex flex-col gap-3.5">
               <TabPanels className="flex-1">
                 {/* Panel 1: IVs & Stats Table */}
-                <TabPanel className="space-y-3 animate-ds-tab focus:outline-none">
+                <TabPanel className="space-y-3.5 animate-ds-tab focus:outline-none">
                   <div className="border border-[var(--border-mid)] rounded-lg overflow-hidden">
-                    <div className="grid grid-cols-[88px_1fr_44px_56px_46px] bg-[#1b1f26] text-slate-300 font-mono-num text-[10px] font-bold uppercase">
+                    <div className="grid grid-cols-[92px_1fr_48px_64px_48px] bg-[#1b1f26] text-slate-300 font-mono-num text-[10px] font-bold uppercase">
                       <div className="px-3 py-2">Stat</div>
                       <div className="px-2 py-2 text-center">IV (0–32)</div>
                       <div className="px-1 py-2 text-center">IV</div>
-                      <div className="px-1 py-2 text-center">Base</div>
+                      <div className="px-1 py-2 text-center">Stat</div>
                       <div className="px-1 py-2 text-center">Rank</div>
                     </div>
 
@@ -167,13 +205,13 @@ export function PokemonSheetModal({
                       return (
                         <div
                           key={k}
-                          className={`grid grid-cols-[88px_1fr_44px_56px_46px] items-center border-t border-[var(--border-soft)] ${rowBg}`}
+                          className={`grid grid-cols-[92px_1fr_48px_64px_48px] items-center border-t border-[var(--border-soft)] ${rowBg}`}
                         >
                           <div className="px-3 py-2 text-xs font-bold text-[var(--ink)]">
                             {lbl}
                           </div>
                           <div className="px-2 py-2">
-                            <DsBar pct={pct} tone={tone} height={7} />
+                            <DsBar pct={pct} tone={tone} height={8} />
                           </div>
                           <div
                             className={`font-mono-num text-xs font-bold text-center py-2 ${
@@ -186,7 +224,7 @@ export function PokemonSheetModal({
                           >
                             {iv}
                           </div>
-                          <div className="font-mono-num text-xs text-center py-2 text-[var(--ink-muted)]">
+                          <div className="font-mono-num text-xs font-semibold text-center py-2 text-[var(--ink-muted)]">
                             {statVal || "—"}
                           </div>
                           <div className="font-mono-num text-[11px] font-bold text-center py-2 text-[var(--ink)]">
@@ -198,7 +236,7 @@ export function PokemonSheetModal({
                   </div>
 
                   {/* Birth Grade & IV Summary */}
-                  <div className="px-inset p-3 space-y-2 text-xs">
+                  <div className="px-inset p-3.5 space-y-2 text-xs">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="font-bold text-[var(--ink-muted)]">Nota de Nascença</span>
                       <span className={`font-mono-num font-bold uppercase ${GRADE_COLORS[sheet.faixa] || "text-[var(--ink)]"}`}>
@@ -226,9 +264,9 @@ export function PokemonSheetModal({
                   </div>
                 </TabPanel>
 
-                {/* Panel 2: Combat Power + Hexagonal IV Radar */}
-                <TabPanel className="space-y-3 animate-ds-tab focus:outline-none">
-                  <div className="grid grid-cols-2 gap-2.5 text-xs">
+                {/* Panel 2: Combat Power + Hexagonal Stats / IV Radar */}
+                <TabPanel className="space-y-3.5 animate-ds-tab focus:outline-none">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
                     <div className="px-inset p-3">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink-muted)] flex items-center gap-1">
                         <Swords className="w-3.5 h-3.5 text-[var(--ink-accent-rose)]" /> Poder PvP
@@ -271,9 +309,7 @@ export function PokemonSheetModal({
                     </div>
                   </div>
 
-                  <div className="px-inset p-2.5 flex items-center justify-center">
-                    <IVRadar ivs={sheet.ivs} />
-                  </div>
+                  <StatsRadar stats={sheet.stats} ivs={sheet.ivs} />
                 </TabPanel>
 
                 {/* Panel 3: Branched / Final Evolutions */}
@@ -291,16 +327,16 @@ export function PokemonSheetModal({
                     </div>
 
                     {evolutions.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         {evolutions.map((evo) => (
                           <div
                             key={evo.pokeId}
-                            className="px-inset p-2.5 flex items-center gap-2.5"
+                            className="px-inset p-3 flex items-center gap-3"
                           >
                             <PokemonSprite
                               looktype={evo.looktype}
                               bridgePort={bridgePort}
-                              size={40}
+                              size={52}
                               shiny={sheet.shiny}
                               className="px-stage shrink-0"
                             />
@@ -347,7 +383,7 @@ export function PokemonSheetModal({
 
               {/* Optional Market Listing Footer */}
               {listing && (
-                <div className="rounded-lg bg-emerald-500/10 border border-emerald-600/35 p-3 flex items-center justify-between gap-3 text-xs">
+                <div className="rounded-xl bg-emerald-500/12 border border-emerald-600/35 p-3.5 flex items-center justify-between gap-3 text-xs">
                   <div>
                     <div className="font-semibold text-[var(--ink)]">
                       Anúncio <span className="font-mono-num">#{listing.id}</span> · Vendedor:{" "}
@@ -377,51 +413,164 @@ export function PokemonSheetModal({
   );
 }
 
-function IVRadar({ ivs }: { ivs: Record<string, number> }) {
-  const cx = 80;
-  const cy = 80;
-  const r = 56;
-  const pts = STAT_LABELS.map(([k], i) => {
+function StatsRadar({
+  stats,
+  ivs,
+}: {
+  stats: Record<string, number>;
+  ivs: Record<string, number>;
+}) {
+  const statsAvailable = hasAnyStats(stats);
+  const [mode, setMode] = useState<"stats" | "ivs">(statsAvailable ? "stats" : "ivs");
+  const activeMode = mode === "stats" && statsAvailable ? "stats" : "ivs";
+
+  const cx = 140;
+  const cy = 112;
+  const r = 72;
+
+  const statValues = STAT_LABELS.map(([k]) => stats[k] || 0);
+  const maxStat = Math.max(...statValues, 1);
+  const minStat = Math.min(...statValues);
+  // Amplify visual contrast slightly when stats are close in value while preserving exact proportions
+  const statFloor = maxStat > minStat ? Math.max(0, minStat * 0.45) : 0;
+  const statSpan = Math.max(1, maxStat - statFloor);
+
+  const rings = [0.25, 0.5, 0.75, 1];
+  const ringPolys = rings.map((scale) =>
+    STAT_LABELS.map((_, i) => {
+      const angle = -Math.PI / 2 + (i * 2 * Math.PI) / 6;
+      return `${cx + Math.cos(angle) * r * scale},${cy + Math.sin(angle) * r * scale}`;
+    }).join(" ")
+  );
+
+  const pts = STAT_LABELS.map(([k, , shortLabel], i) => {
     const angle = -Math.PI / 2 + (i * 2 * Math.PI) / 6;
-    const ratio = Math.min(1, Math.max(0.08, (ivs[k] || 0) / 32));
+    const rawVal = activeMode === "stats" ? stats[k] || 0 : ivs[k] || 0;
+    const ratio =
+      activeMode === "stats"
+        ? Math.min(1, Math.max(0.14, (rawVal - statFloor) / statSpan))
+        : Math.min(1, Math.max(0.08, rawVal / 32));
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
     return {
-      x: cx + Math.cos(angle) * r * ratio,
-      y: cy + Math.sin(angle) * r * ratio,
-      lx: cx + Math.cos(angle) * (r + 16),
-      ly: cy + Math.sin(angle) * (r + 16),
-      gx: cx + Math.cos(angle) * r,
-      gy: cy + Math.sin(angle) * r,
-      label: ["HP", "ATK", "DEF", "SpA", "SpD", "SPD"][i],
+      key: k,
+      x: cx + cos * r * ratio,
+      y: cy + sin * r * ratio,
+      gx: cx + cos * r,
+      gy: cy + sin * r,
+      lx: cx + cos * (r + 27),
+      ly: cy + sin * (r + 22),
+      label: shortLabel,
+      valueText: activeMode === "stats" ? String(rawVal) : `${rawVal}/32`,
     };
   });
+
   const poly = pts.map((p) => `${p.x},${p.y}`).join(" ");
-  const outer = pts.map((p) => `${p.gx},${p.gy}`).join(" ");
+  const fillCol = activeMode === "stats" ? "rgba(37, 99, 235, 0.24)" : "rgba(224, 67, 56, 0.26)";
+  const strokeCol = activeMode === "stats" ? "#2563eb" : "#cf3026";
+
   return (
-    <svg viewBox="0 0 160 160" className="w-40 h-40 mx-auto">
-      <polygon points={outer} fill="var(--panel-bg)" stroke="var(--border-dark)" strokeWidth="1.5" />
-      {pts.map((p, i) => (
-        <line key={i} x1={cx} y1={cy} x2={p.gx} y2={p.gy} stroke="var(--border-mid)" strokeWidth="1" strokeDasharray="2 2" />
-      ))}
-      <polygon
-        points={poly}
-        fill="rgba(224, 67, 56, 0.28)"
-        stroke="#cf3026"
-        strokeWidth="2.2"
-      />
-      {pts.map((p, i) => (
-        <text
-          key={i}
-          x={p.lx}
-          y={p.ly}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize="9"
-          fontWeight="700"
-          fill="var(--ink)"
-        >
-          {p.label}
-        </text>
-      ))}
-    </svg>
+    <div className="px-inset p-3.5 space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--ink-muted)]">
+          {activeMode === "stats" ? "Distribuição de Atributos (Stats)" : "Distribuição de IVs (0–32)"}
+        </div>
+        <div className="inline-flex rounded-lg bg-[var(--panel-deep)] p-0.5 border border-[var(--border-mid)] text-[11px]">
+          <button
+            type="button"
+            disabled={!statsAvailable}
+            onClick={() => setMode("stats")}
+            className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer disabled:opacity-40 ${
+              activeMode === "stats"
+                ? "bg-[#2563eb] text-white shadow-sm"
+                : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            Stats
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("ivs")}
+            className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
+              activeMode === "ivs"
+                ? "bg-[var(--dex-red)] text-white shadow-sm"
+                : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            IVs (0–32)
+          </button>
+        </div>
+      </div>
+
+      <svg viewBox="0 0 280 226" className="w-full max-w-[300px] h-auto mx-auto block">
+        {ringPolys.map((rp, idx) => (
+          <polygon
+            key={idx}
+            points={rp}
+            fill={idx === rings.length - 1 ? "var(--panel-bg)" : "none"}
+            stroke={idx === rings.length - 1 ? "var(--border-dark)" : "var(--border-mid)"}
+            strokeWidth={idx === rings.length - 1 ? "1.5" : "0.9"}
+            strokeDasharray={idx === rings.length - 1 ? undefined : "2 2"}
+          />
+        ))}
+        {pts.map((p) => (
+          <line
+            key={p.key}
+            x1={cx}
+            y1={cy}
+            x2={p.gx}
+            y2={p.gy}
+            stroke="var(--border-mid)"
+            strokeWidth="1"
+            strokeDasharray="2 2"
+          />
+        ))}
+        <polygon
+          points={poly}
+          fill={fillCol}
+          stroke={strokeCol}
+          strokeWidth="2.4"
+          strokeLinejoin="round"
+        />
+        {pts.map((p) => (
+          <circle
+            key={`dot-${p.key}`}
+            cx={p.x}
+            cy={p.y}
+            r="3.2"
+            fill={strokeCol}
+            stroke="var(--panel-bg)"
+            strokeWidth="1.2"
+          />
+        ))}
+        {pts.map((p) => (
+          <g key={`lbl-${p.key}`}>
+            <text
+              x={p.lx}
+              y={p.ly - 5}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize="10"
+              fontWeight="800"
+              fill="var(--ink)"
+            >
+              {p.label}
+            </text>
+            <text
+              x={p.lx}
+              y={p.ly + 8}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize="10"
+              fontWeight="700"
+              fontFamily="JetBrains Mono, monospace"
+              fill={strokeCol}
+            >
+              {p.valueText}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
   );
 }

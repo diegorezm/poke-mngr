@@ -314,6 +314,10 @@ export interface PokemonDetail {
     "ivSoma": number;
     "ivPct": number;
     "stats": { [_ in string]?: number } | null;
+    "baseStats"?: { [_ in string]?: number } | null;
+    "refino"?: { [_ in string]?: number } | null;
+    "tmElemental"?: string;
+    "tmAoe"?: boolean;
     "tipos": string[] | null;
     "nota": number;
     "faixa": string;

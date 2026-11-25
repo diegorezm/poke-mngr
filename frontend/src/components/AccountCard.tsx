@@ -514,7 +514,7 @@ export function AccountCard({
 
                     <PopoverPanel
                       transition
-                      className="absolute left-0 bottom-full mb-2 z-30 w-64 px-box p-2 grid grid-cols-2 gap-1.5 transition duration-150 ease-out data-[closed]:opacity-0 data-[closed]:translate-y-1 data-[closed]:scale-95"
+                      className="absolute left-0 bottom-full mb-2 z-30 w-80 px-box p-2.5 grid grid-cols-2 gap-1.5 transition duration-150 ease-out data-[closed]:opacity-0 data-[closed]:translate-y-1 data-[closed]:scale-95"
                     >
                       {POTION_OPTIONS.map((opt) => {
                         const selected = acc.equippedPotion?.id === opt.id;
@@ -522,13 +522,13 @@ export function AccountCard({
                           <button
                             key={opt.id}
                             onClick={() => handleEquip("potion", opt.id, close)}
-                            className={`px-2 py-1.5 rounded-lg text-xs text-left flex items-center gap-2 border transition cursor-pointer ${
+                            className={`px-2.5 py-2 rounded-lg text-xs text-left flex items-center gap-2 border transition cursor-pointer ${
                               selected
                                 ? "bg-[var(--row-active-bg)] border-[var(--row-active-border)] text-[var(--row-active-ink)] font-bold"
                                 : "bg-[var(--panel-alt)] border-[var(--border-mid)] text-[var(--ink)] hover:border-[var(--border-dark)]"
                             }`}
                           >
-                            <ItemSprite icon={opt.icon} size={20} alt={opt.name} />
+                            <ItemSprite icon={opt.icon} size={22} alt={opt.name} />
                             <span className="font-semibold truncate">{opt.name}</span>
                           </button>
                         );
@@ -567,7 +567,7 @@ export function AccountCard({
 
                     <PopoverPanel
                       transition
-                      className="absolute right-0 bottom-full mb-2 z-30 w-64 px-box p-2 grid grid-cols-2 gap-1.5 transition duration-150 ease-out data-[closed]:opacity-0 data-[closed]:translate-y-1 data-[closed]:scale-95"
+                      className="absolute right-0 bottom-full mb-2 z-30 w-72 px-box p-2.5 grid grid-cols-2 gap-1.5 transition duration-150 ease-out data-[closed]:opacity-0 data-[closed]:translate-y-1 data-[closed]:scale-95"
                     >
                       {BALL_OPTIONS.map((opt) => {
                         const selected = acc.equippedBall?.id === opt.id;
@@ -575,13 +575,13 @@ export function AccountCard({
                           <button
                             key={opt.id}
                             onClick={() => handleEquip("ball", opt.id, close)}
-                            className={`px-2 py-1.5 rounded-lg text-xs text-left flex items-center gap-2 border transition cursor-pointer ${
+                            className={`px-2.5 py-2 rounded-lg text-xs text-left flex items-center gap-2 border transition cursor-pointer ${
                               selected
                                 ? "bg-[var(--row-active-bg)] border-[var(--row-active-border)] text-[var(--row-active-ink)] font-bold"
                                 : "bg-[var(--panel-alt)] border-[var(--border-mid)] text-[var(--ink)] hover:border-[var(--border-dark)]"
                             }`}
                           >
-                            <ItemSprite icon={opt.icon} size={20} alt={opt.name} />
+                            <ItemSprite icon={opt.icon} size={22} alt={opt.name} />
                             <span className="font-semibold truncate">{opt.name}</span>
                           </button>
                         );

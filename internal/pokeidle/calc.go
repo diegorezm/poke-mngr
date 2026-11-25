@@ -69,6 +69,10 @@ type PokemonDetail struct {
 	IVSum       int                   `json:"ivSoma"`
 	IVPct       float64               `json:"ivPct"`
 	Stats       map[string]int        `json:"stats"`
+	BaseStats   map[string]int        `json:"baseStats,omitempty"`
+	Refino      map[string]int        `json:"refino,omitempty"`
+	TmElemental string                `json:"tmElemental,omitempty"`
+	TmAoe       bool                  `json:"tmAoe,omitempty"`
 	Types       []string              `json:"tipos"`
 	Grade       float64               `json:"nota"`
 	GradeTier   string                `json:"faixa"`
@@ -224,6 +228,48 @@ func BuildPokemonDetailWithCatalog(accID int, accNick string, activeID int, pk m
 		}
 	}
 
+	// If the server omitted precomputed stats (e.g., compact market listing), fall back to species base stats
+	// so the combat stat chart always reflects the species' real stat distribution.
+	hasStats := false
+	for _, k := range statKeys {
+		if stats[k] > 0 {
+			hasStats = true
+			break
+		}
+	}
+	if !hasStats && spPtr != nil {
+		stats["hp"] = spPtr.BaseHP
+		stats["atk"] = spPtr.BaseAtk
+		stats["def"] = spPtr.BaseDef
+		stats["spAtk"] = spPtr.BaseSpAtk
+		stats["spDef"] = spPtr.BaseSpDef
+		stats["speed"] = spPtr.BaseSpeed
+	}
+
+	var baseStats map[string]int
+	if spPtr != nil && (spPtr.BaseHP > 0 || spPtr.BaseAtk > 0) {
+		baseStats = map[string]int{
+			"hp":    spPtr.BaseHP,
+			"atk":   spPtr.BaseAtk,
+			"def":   spPtr.BaseDef,
+			"spAtk": spPtr.BaseSpAtk,
+			"spDef": spPtr.BaseSpDef,
+			"speed": spPtr.BaseSpeed,
+		}
+	}
+
+	var refino map[string]int
+	if refRaw := asMap(pk["refino"]); len(refRaw) > 0 {
+		for _, k := range statKeys {
+			if rv := asInt(refRaw[k]); rv > 0 {
+				if refino == nil {
+					refino = map[string]int{}
+				}
+				refino[k] = rv
+			}
+		}
+	}
+
 	grade, tier, axes := ComputeBirthGradeWithBases(ivs, quality, potency, shiny, bases)
 
 	tipos := []string{}
@@ -300,6 +346,10 @@ func BuildPokemonDetailWithCatalog(accID int, accNick string, activeID int, pk m
 		IVSum:       ivSum,
 		IVPct:       (float64(ivSum) / 192.0) * 100.0,
 		Stats:       stats,
+		BaseStats:   baseStats,
+		Refino:      refino,
+		TmElemental: asString(pk["tmElemental"]),
+		TmAoe:       asBool(pk["tmAoe"]),
 		Types:       tipos,
 		Grade:       grade,
 		GradeTier:   tier,

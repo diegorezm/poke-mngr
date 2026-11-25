@@ -256,13 +256,13 @@ export function BestHuntCard({
                       <PokemonSprite
                         looktype={h.mainLook}
                         bridgePort={bridgePort}
-                        size={54}
+                        size={60}
                         className="px-stage shrink-0"
                       />
 
                       <div className="min-w-0 space-y-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-bold text-sm text-[var(--ink)] truncate">
+                          <span className="font-bold text-[15px] text-[var(--ink)] truncate">
                             {h.nome || l.nome}
                           </span>
                           <span className="font-mono-num text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--panel-deep)] text-[var(--ink-muted)] uppercase">
