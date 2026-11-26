@@ -25,7 +25,7 @@ import (
 //	-X poke-mngr/internal/updater.Version=0.2.0
 //	-X poke-mngr/internal/updater.DefaultRepo=owner/poke-mngr
 var (
-	Version     = "1.1.0"
+	Version     = "1.2.0"
 	DefaultRepo = "diegorezm/poke-mngr"
 )
 
