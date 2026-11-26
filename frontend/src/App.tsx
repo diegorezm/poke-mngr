@@ -80,6 +80,8 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   cardStyle: "padrao",
   language: "pt",
   sniperEnabled: false,
+  autoSellEnabled: false,
+  autoSellDryRun: false,
   marketSellAlert: false,
   marketSellAlertPct: 30,
   deckLayout: "grid",

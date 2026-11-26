@@ -13,8 +13,11 @@ import type {
   ListingDetail,
   LivesAccountConfig,
   LivesCentralState,
+  MarketActionResult,
   MarketLogEntry,
   MarketRule,
+  MarketSellRule,
+  AutoSellPreviewItem,
   PokemonDetail,
   ProbeResult,
   ProxyConfig,
@@ -129,6 +132,20 @@ export const api = {
   deleteMarketRule: (id: number) => invoke<void>("DeleteMarketRule", id),
   listMarketLog: () => invoke<MarketLogEntry[]>("ListMarketLog"),
   setSniperEnabled: (enabled: boolean) => invoke<void>("SetSniperEnabled", enabled),
+
+  // Auto-Sell & Listing Management
+  listMarketSellRules: () => invoke<MarketSellRule[]>("ListMarketSellRules"),
+  saveMarketSellRule: (rule: MarketSellRule) => invoke<MarketSellRule>("SaveMarketSellRule", rule),
+  toggleMarketSellRule: (id: number) => invoke<boolean>("ToggleMarketSellRule", id),
+  deleteMarketSellRule: (id: number) => invoke<void>("DeleteMarketSellRule", id),
+  setAutoSellConfig: (enabled: boolean, dryRun: boolean) =>
+    invoke<void>("SetAutoSellConfig", enabled, dryRun),
+  previewAutoSell: (ruleId: number) =>
+    invoke<AutoSellPreviewItem[]>("PreviewAutoSell", ruleId),
+  editMarketListing: (accountId: number, listingId: number, price: number, moeda: string) =>
+    invoke<MarketActionResult>("EditMarketListing", accountId, listingId, price, moeda),
+  cancelMarketListing: (accountId: number, listingId: number) =>
+    invoke<MarketActionResult>("CancelMarketListing", accountId, listingId),
 
   // PvP
   getPvpOverview: () => invoke<PvpAccountView[]>("GetPvpOverview"),

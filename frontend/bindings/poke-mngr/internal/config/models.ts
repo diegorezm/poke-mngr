@@ -58,6 +58,8 @@ export interface GlobalSettings {
      */
     "language": string;
     "sniperEnabled": boolean;
+    "autoSellEnabled": boolean;
+    "autoSellDryRun": boolean;
     "marketSellAlert": boolean;
     "marketSellAlertPct": number;
 

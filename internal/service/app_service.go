@@ -567,6 +567,43 @@ func (s *AppService) SetSniperEnabled(enabled bool) error {
 	return s.mgr.UpdateSettings(gs)
 }
 
+// --- Auto-Sell & Listing Management ---
+
+func (s *AppService) ListMarketSellRules() ([]store.MarketSellRule, error) {
+	return s.mgr.Store().ListMarketSellRules()
+}
+
+func (s *AppService) SaveMarketSellRule(rule store.MarketSellRule) (store.MarketSellRule, error) {
+	return s.mgr.Store().SaveMarketSellRule(rule)
+}
+
+func (s *AppService) ToggleMarketSellRule(id int) (bool, error) {
+	return s.mgr.Store().ToggleMarketSellRule(id)
+}
+
+func (s *AppService) DeleteMarketSellRule(id int) error {
+	return s.mgr.Store().DeleteMarketSellRule(id)
+}
+
+func (s *AppService) SetAutoSellConfig(enabled, dryRun bool) error {
+	gs := s.mgr.Settings()
+	gs.AutoSellEnabled = enabled
+	gs.AutoSellDryRun = dryRun
+	return s.mgr.UpdateSettings(gs)
+}
+
+func (s *AppService) PreviewAutoSell(ruleID int) ([]pokeidle.AutoSellPreviewItem, error) {
+	return s.mgr.Market().PreviewAutoSell(context.Background(), ruleID)
+}
+
+func (s *AppService) EditMarketListing(accountID, listingID int, price int64, moeda string) (pokeidle.MarketActionResult, error) {
+	return s.mgr.Market().EditListing(context.Background(), accountID, listingID, price, moeda)
+}
+
+func (s *AppService) CancelMarketListing(accountID, listingID int) (pokeidle.MarketActionResult, error) {
+	return s.mgr.Market().CancelListing(context.Background(), accountID, listingID)
+}
+
 // --- PvP Service Methods (Fase 4) ---
 
 func (s *AppService) GetPvpOverview() []pokeidle.PvpAccountView {

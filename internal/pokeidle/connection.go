@@ -286,6 +286,24 @@ func (ac *AccountConnection) ServerNowMs() int64 {
 	return time.Now().UnixMilli() + off
 }
 
+type AccountSellState struct {
+	Online     bool
+	Account    config.AccountRecord
+	Estado     map[string]any
+	MercadoCfg map[string]any
+}
+
+func (ac *AccountConnection) SellStateSnapshot() AccountSellState {
+	ac.mu.RLock()
+	defer ac.mu.RUnlock()
+	return AccountSellState{
+		Online:     ac.state == StateOnline,
+		Account:    ac.acc,
+		Estado:     deepCloneMap(ac.hunt.Estado),
+		MercadoCfg: deepCloneMap(ac.mercadoCfg),
+	}
+}
+
 func (ac *AccountConnection) sendJSON(ctx context.Context, payload any) error {
 	b, err := json.Marshal(payload)
 	if err != nil {

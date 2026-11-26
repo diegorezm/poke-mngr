@@ -97,3 +97,137 @@ export interface MarketRuleSpec {
     "dailyBudget"?: number;
     "accountIds"?: number[] | null;
 }
+
+export interface MarketSellRule {
+    "id": number;
+    "enabled": boolean;
+    "spec": MarketSellRuleSpec;
+    "listed": number;
+    "lastFire": number;
+    "createdAt": number;
+}
+
+export interface MarketSellRuleSpec {
+    /**
+     * "item" | "pokemon"
+     */
+    "target": string;
+
+    /**
+     * "gold" | "orb"
+     */
+    "moeda": string;
+
+    /**
+     * Item excess settings
+     */
+    "itemId"?: number;
+    "itemName"?: string;
+
+    /**
+     * keep at least this many in bag
+     */
+    "keepQty"?: number;
+
+    /**
+     * minimum excess lot to list
+     */
+    "minSellQty"?: number;
+
+    /**
+     * max simultaneous ads per item/account
+     */
+    "maxActiveAds"?: number;
+
+    /**
+     * Pokemon excess & protection settings
+     * species name filter (empty = any)
+     */
+    "query"?: string;
+
+    /**
+     * keep top N per species by grade/IV
+     */
+    "keepBestCount"?: number;
+
+    /**
+     * "no" | "only" | "any"
+     */
+    "shinyMode"?: string;
+    "allowP5"?: boolean;
+    "allowZMove"?: boolean;
+    "allowTmAoe"?: boolean;
+
+    /**
+     * 0 = no cap
+     */
+    "maxGrade"?: number;
+
+    /**
+     * 0 = no cap
+     */
+    "maxIv"?: number;
+
+    /**
+     * 0 = server min
+     */
+    "minLevel"?: number;
+
+    /**
+     * 0 = no cap
+     */
+    "maxLevel"?: number;
+
+    /**
+     * 1..30 (pokemon stay duration)
+     */
+    "days"?: number;
+    "goldFloor"?: number;
+
+    /**
+     * Pricing settings
+     * "smart" | "undercut" | "fixed"
+     */
+    "priceMode": string;
+
+    /**
+     * used when priceMode == "fixed"
+     */
+    "fixedPrice"?: number;
+
+    /**
+     * hard minimum price floor
+     */
+    "minPrice"?: number;
+
+    /**
+     * smart mode floor % of 7d avg/median
+     */
+    "minPctOfAvg"?: number;
+
+    /**
+     * flat undercut amount
+     */
+    "undercutStep"?: number;
+
+    /**
+     * % undercut below lowest valid listing
+     */
+    "undercutPct"?: number;
+
+    /**
+     * "hold" | "list_at_floor"
+     */
+    "belowFloorAction"?: string;
+
+    /**
+     * Auto-reprice settings
+     */
+    "repriceEnabled"?: boolean;
+
+    /**
+     * min % diff to edit listing
+     */
+    "repriceMinDiffPct"?: number;
+    "accountIds"?: number[] | null;
+}

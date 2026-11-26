@@ -56,6 +56,32 @@ export interface ActivePokemonSheet {
     "trainerLevel": number;
 }
 
+export interface AutoSellPreviewItem {
+    "ruleId": number;
+    "accountId": number;
+    "accountNick": string;
+
+    /**
+     * "create" | "reprice" | "hold" | "blocked"
+     */
+    "action": string;
+
+    /**
+     * "item" | "pokemon"
+     */
+    "target": string;
+    "label": string;
+    "listingId"?: number;
+    "qty": number;
+    "currentPrice"?: number;
+    "price": number;
+    "moeda": string;
+    "marketFloor": number;
+    "refAvg": number;
+    "hardFloor": number;
+    "reason": string;
+}
+
 export interface BlockInfo {
     "kind": string;
     "detail": string;
@@ -263,6 +289,14 @@ export interface ListingDetail {
     "itemId"?: number;
     "itemIcon"?: string;
     "pokemon"?: PokemonDetail | null;
+}
+
+export interface MarketActionResult {
+    /**
+     * ok | recusado | limite | timeout
+     */
+    "status": string;
+    "detail": string;
 }
 
 export interface MarketBuyResult {

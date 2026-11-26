@@ -6,5 +6,7 @@ export type {
     LivesLogEntry,
     MarketLogEntry,
     MarketRule,
-    MarketRuleSpec
+    MarketRuleSpec,
+    MarketSellRule,
+    MarketSellRuleSpec
 } from "./models.js";

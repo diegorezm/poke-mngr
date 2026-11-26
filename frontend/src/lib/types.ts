@@ -171,6 +171,8 @@ export interface GlobalSettings {
   cardStyle: CardStyle;
   language: string;
   sniperEnabled: boolean;
+  autoSellEnabled: boolean;
+  autoSellDryRun: boolean;
   marketSellAlert: boolean;
   marketSellAlertPct: number;
   deckLayout: string;
@@ -431,6 +433,81 @@ export interface MarketLogEntry {
   ruleId: number;
   status: string;
   text: string;
+}
+
+export type SellPriceMode = "smart" | "undercut" | "fixed";
+
+export interface MarketSellRuleSpec {
+  target: "item" | "pokemon";
+  moeda: "gold" | "orb";
+
+  // Item settings
+  itemId?: number;
+  itemName?: string;
+  keepQty?: number;
+  minSellQty?: number;
+  maxActiveAds?: number;
+
+  // Pokemon settings
+  query?: string;
+  keepBestCount?: number;
+  shinyMode?: "no" | "only" | "any";
+  allowP5?: boolean;
+  allowZMove?: boolean;
+  allowTmAoe?: boolean;
+  maxGrade?: number;
+  maxIv?: number;
+  minLevel?: number;
+  maxLevel?: number;
+  days?: number;
+  goldFloor?: number;
+
+  // Pricing
+  priceMode: SellPriceMode;
+  fixedPrice?: number;
+  minPrice?: number;
+  minPctOfAvg?: number;
+  undercutStep?: number;
+  undercutPct?: number;
+  belowFloorAction?: "hold" | "list_at_floor";
+
+  // Auto-reprice
+  repriceEnabled?: boolean;
+  repriceMinDiffPct?: number;
+
+  accountIds?: number[];
+}
+
+export interface MarketSellRule {
+  id: number;
+  enabled: boolean;
+  spec: MarketSellRuleSpec;
+  listed: number;
+  lastFire: number;
+  createdAt: number;
+}
+
+export interface AutoSellPreviewItem {
+  ruleId: number;
+  accountId: number;
+  accountNick: string;
+  action: "create" | "reprice" | "hold" | "blocked";
+  target: "item" | "pokemon";
+  label: string;
+  listingId?: number;
+  qty: number;
+  currentPrice?: number;
+  price: number;
+  moeda: "gold" | "orb";
+  marketFloor: number;
+  refAvg: number;
+  hardFloor: number;
+  reason: string;
+}
+
+export interface MarketActionResult {
+  status: string;
+  detail: string;
 }
 
 export interface PvpMatchEntry {

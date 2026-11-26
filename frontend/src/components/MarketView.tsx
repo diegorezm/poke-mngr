@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Eye,
   Loader2,
+  Pencil,
 } from "lucide-react";
 import {
   AccountTelemetry,
@@ -26,6 +27,7 @@ import {
   ListingDetail,
   MarketLogEntry,
   MarketRule,
+  MarketSellRule,
   PokemonDetail,
   fmtCompact,
 } from "../lib/types";
@@ -33,6 +35,7 @@ import { TYPES } from "../lib/gameData";
 import { api } from "../lib/api";
 import { ItemSprite, PokemonSprite } from "./PokemonSprite";
 import { DsConfirmDialog, DsDialog, DsTypeBadge } from "./DsPrimitives";
+import { MarketAutoSellTab } from "./MarketAutoSellTab";
 import { GRADE_PILL_BG, PokemonSheetModal } from "./PokemonSheetModal";
 import {
   InflationChart,
@@ -42,7 +45,13 @@ import {
   Sparkline,
 } from "./MarketCharts";
 
-type MarketSubTab = "prices" | "vitrine" | "tape" | "stats" | "rules" | "mine";
+type MarketSubTab = "prices" | "vitrine" | "tape" | "stats" | "rules" | "autosell" | "mine";
+
+function formatEditableAt(raw: unknown): string {
+  const ms = Number(raw || 0);
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  return new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
 
 interface ItemMetaEntry {
   id: number;
@@ -310,6 +319,7 @@ export function MarketView({
   // Rules & Sniper
   const [sniperEnabled, setSniperEnabled] = useState(false);
   const [rules, setRules] = useState<MarketRule[]>([]);
+  const [sellRules, setSellRules] = useState<MarketSellRule[]>([]);
   const [logs, setLogs] = useState<MarketLogEntry[]>([]);
   const [newRuleKind, setNewRuleKind] = useState<"alert" | "snipe">("alert");
   const [newTarget, setNewTarget] = useState<"item" | "pokemon">("item");
@@ -331,7 +341,16 @@ export function MarketView({
   const [myListings, setMyListings] = useState<Record<string, unknown>[]>([]);
   const [wallet, setWallet] = useState<Record<string, unknown> | null>(null);
   const [calcPrice, setCalcPrice] = useState(1000000);
-  const [calcFeePct, setCalcFeePct] = useState(5);
+  const [calcFeePct, setCalcFeePct] = useState(15);
+  const [editingListing, setEditingListing] = useState<{
+    id: number;
+    label: string;
+    price: number;
+    moeda: "gold" | "orb";
+    shinyPokemon: boolean;
+  } | null>(null);
+  const [cancelingListing, setCancelingListing] = useState<{ id: number; label: string } | null>(null);
+  const [listingActionBusy, setListingActionBusy] = useState(false);
 
   const onlineAccounts = accounts.filter((a) => a.state === "ONLINE");
   const activeBuyer = onlineAccounts.find((a) => a.id === buyerId) || onlineAccounts[0];
@@ -366,12 +385,23 @@ export function MarketView({
   };
 
   const loadRules = async () => {
-    const [r, l] = await Promise.all([
+    const [r, sr, l] = await Promise.all([
       api.listMarketRules().catch(() => []),
+      api.listMarketSellRules().catch(() => []),
       api.listMarketLog().catch(() => []),
     ]);
     setRules(Array.isArray(r) ? r : []);
+    setSellRules(Array.isArray(sr) ? sr : []);
     setLogs(Array.isArray(l) ? l : []);
+  };
+
+  const refreshMyListings = async (accId: number) => {
+    try {
+      const res = await api.getMarketMyListings(accId);
+      setMyListings(extractRows(res));
+    } catch {
+      // ignore transient errors
+    }
   };
 
   useEffect(() => {
@@ -587,6 +617,42 @@ export function MarketView({
     onToast(next ? "Sniper LIGADO (com orçamento diário)" : "Sniper DESLIGADO");
   };
 
+  const handleConfirmEditListing = async () => {
+    if (!activeBuyer || !editingListing) return;
+    const accId = activeBuyer.id;
+    const listingId = editingListing.id;
+    const nextPrice = Math.max(2, Math.floor(editingListing.price));
+    const nextMoeda = editingListing.shinyPokemon ? "orb" : editingListing.moeda;
+    setListingActionBusy(true);
+    try {
+      const res = await api.editMarketListing(accId, listingId, nextPrice, nextMoeda);
+      setEditingListing(null);
+      onToast(`Editar anúncio #${listingId}: ${res.status} — ${res.detail}`);
+      refreshMyListings(accId);
+      loadRules();
+    } catch (e) {
+      onToast(`Erro ao editar: ${String(e)}`);
+    }
+    setListingActionBusy(false);
+  };
+
+  const handleConfirmCancelListing = async () => {
+    if (!activeBuyer || !cancelingListing) return;
+    const accId = activeBuyer.id;
+    const listingId = cancelingListing.id;
+    setListingActionBusy(true);
+    try {
+      const res = await api.cancelMarketListing(accId, listingId);
+      setCancelingListing(null);
+      onToast(`Cancelar anúncio #${listingId}: ${res.status} — ${res.detail}`);
+      refreshMyListings(accId);
+      loadRules();
+    } catch (e) {
+      onToast(`Erro ao cancelar: ${String(e)}`);
+    }
+    setListingActionBusy(false);
+  };
+
   return (
     <div className="space-y-4">
       {/* Header Controls */}
@@ -599,7 +665,8 @@ export function MarketView({
               ["tape", "Histórico"],
               ["stats", "Estatísticas"],
               ["rules", `Alertas & Sniper (${rules.length})`],
-              ["mine", "Carteira & Calc"],
+              ["autosell", `Auto-Venda (${sellRules.length})`],
+              ["mine", "Carteira & Anúncios"],
             ] as [MarketSubTab, string][]
           ).map(([id, label]) => (
             <button
@@ -1526,68 +1593,164 @@ export function MarketView({
         </div>
       )}
 
+      {/* Auto-Sell & Auto-Reprice */}
+      {sub === "autosell" && (
+        <MarketAutoSellTab
+          accounts={accounts}
+          settings={settings}
+          defaultMoeda={moeda}
+          itemsMeta={itemsMeta}
+          resumo={resumo}
+          medias={medias}
+          sellRules={sellRules}
+          logs={logs}
+          onSettingsChange={onSettingsChange}
+          onRulesReload={loadRules}
+          onToast={onToast}
+        />
+      )}
+
       {/* Mine / Read-only Gem Wallet / Fee Calculator */}
       {sub === "mine" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="rounded-2xl bg-[#111525] border border-slate-800 p-4 space-y-3">
-            <div className="font-semibold text-white flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-fuchsia-400" /> Carteira de Gemas (Somente Leitura)
+          <div className="px-box p-4 space-y-3">
+            <div className="font-bold text-[var(--ink)] flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-[var(--ink-accent-fuchsia)]" /> Carteira de Gemas (Somente Leitura)
             </div>
-            <p className="text-slate-500">
+            <p className="text-[var(--ink-muted)] font-medium">
               Por segurança, saques de Gemas e envios de Coins são feitos exclusivamente dentro do jogo oficial.
             </p>
-            <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 p-3 font-mono">
-              Saldo: <b className="text-fuchsia-300">{fmtCompact(Number(wallet?.saldo || activeBuyer?.orbs || 0))}</b> Gemas
+            <div className="px-inset p-3 font-mono-num">
+              Saldo:{" "}
+              <b className="text-[var(--ink-accent-fuchsia)]">
+                {fmtCompact(Number(wallet?.saldo || activeBuyer?.orbs || 0))}
+              </b>{" "}
+              Gemas
             </div>
-            <div className="font-semibold text-slate-300 pt-2">
-              Meus Anúncios ({myListings.length})
+            <div className="flex items-center justify-between pt-2">
+              <span className="font-bold text-[var(--ink)]">
+                Meus Anúncios ({myListings.length})
+              </span>
+              {activeBuyer && (
+                <button
+                  type="button"
+                  onClick={() => refreshMyListings(activeBuyer.id)}
+                  className="ds-btn ds-btn-slate ds-btn-sm !px-2"
+                  title="Recarregar meus anúncios"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
-              {myListings.map((a, i) => (
-                <div key={i} className="rounded-lg bg-[#0b0e1b] px-3 py-1.5 flex justify-between">
-                  <span>{String(a.nome || a.descricao || `Anúncio #${a.id}`)}</span>
-                  <span className="text-amber-300 font-mono">
-                    {fmtCompact(Number(a.preco || 0))}
-                  </span>
+            <div className="space-y-1.5 max-h-72 overflow-y-auto">
+              {myListings.length === 0 ? (
+                <div className="px-inset px-3 py-2 text-[var(--ink-muted)] font-medium">
+                  Nenhum anúncio aberto nesta conta.
                 </div>
-              ))}
+              ) : (
+                myListings.map((a, i) => {
+                  const adId = Number(a.id || 0);
+                  const qty = Number(a.qtd || 1);
+                  const price = Number(a.preco || 0);
+                  const adMoeda: "gold" | "orb" = a.moeda === "orb" ? "orb" : "gold";
+                  const ficha = a.ficha as Record<string, unknown> | undefined;
+                  const label = String(
+                    a.nome || a.descricao || ficha?.nome || `Anúncio #${adId}`
+                  );
+                  const editableTime = formatEditableAt(a.editavelEm);
+                  const isShinyPk = a.tipo === "pokemon" && Boolean(ficha?.shiny);
+                  return (
+                    <div
+                      key={adId || i}
+                      className="px-inset px-3 py-2 flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-[var(--ink)] truncate">
+                          {qty > 1 ? `${qty}× ` : ""}
+                          {label}
+                        </div>
+                        <div className="text-[11px] font-mono-num text-[var(--ink-accent-amber)] flex items-center gap-2 flex-wrap">
+                          <span>
+                            {fmtCompact(price)} {adMoeda === "orb" ? "Gemas" : "Gold"}
+                          </span>
+                          {editableTime && (
+                            <span className="text-[10px] text-[var(--ink-subtle)]">
+                              · editável: {editableTime}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {adId > 0 && activeBuyer && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditingListing({
+                                id: adId,
+                                label,
+                                price,
+                                moeda: adMoeda,
+                                shinyPokemon: isShinyPk,
+                              })
+                            }
+                            title="Editar preço"
+                            className="ds-btn ds-btn-blue ds-btn-sm !px-2"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCancelingListing({ id: adId, label })}
+                            title="Cancelar anúncio"
+                            className="ds-btn ds-btn-red ds-btn-sm !px-2"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
-          <div className="rounded-2xl bg-[#111525] border border-slate-800 p-4 space-y-3">
-            <div className="font-semibold text-white flex items-center gap-2">
-              <Calculator className="w-4 h-4 text-amber-400" /> Calculadora de Comissão
+          <div className="px-box p-4 space-y-3">
+            <div className="font-bold text-[var(--ink)] flex items-center gap-2">
+              <Calculator className="w-4 h-4 text-[var(--ink-accent-amber)]" /> Calculadora de Comissão
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-400 mb-1">Preço de Venda</label>
+                <label className="block text-[var(--ink-muted)] font-semibold mb-1">
+                  Preço de Venda
+                </label>
                 <input
                   type="number"
                   value={calcPrice}
                   onChange={(e) => setCalcPrice(Number(e.target.value))}
-                  className="w-full rounded-lg bg-[#0b0e1b] border border-slate-700 px-3 py-2 text-white font-mono"
+                  className="ds-input w-full px-3 py-2 font-mono-num"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Taxa (%)</label>
+                <label className="block text-[var(--ink-muted)] font-semibold mb-1">Taxa (%)</label>
                 <input
                   type="number"
                   value={calcFeePct}
                   onChange={(e) => setCalcFeePct(Number(e.target.value))}
-                  className="w-full rounded-lg bg-[#0b0e1b] border border-slate-700 px-3 py-2 text-white font-mono"
+                  className="ds-input w-full px-3 py-2 font-mono-num"
                 />
               </div>
             </div>
-            <div className="rounded-xl bg-[#0b0e1b] border border-slate-800 p-3 space-y-1 font-mono">
+            <div className="px-inset p-3 space-y-1 font-mono-num">
               <div className="flex justify-between">
-                <span className="text-slate-400">Taxa:</span>
-                <span className="text-rose-300">
+                <span className="text-[var(--ink-muted)]">Taxa:</span>
+                <span className="text-rose-500 font-bold">
                   -{fmtCompact(Math.round((calcPrice * calcFeePct) / 100))}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-slate-300">Você recebe:</span>
-                <span className="text-emerald-300 font-bold">
+                <span className="text-[var(--ink)] font-semibold">Você recebe:</span>
+                <span className="text-[var(--ink-accent-green)] font-bold">
                   {fmtCompact(Math.round(calcPrice * (1 - calcFeePct / 100)))}
                 </span>
               </div>
@@ -1671,6 +1834,96 @@ export function MarketView({
         busy={buyingMarket}
         onConfirm={handleConfirmBuy}
         onClose={() => setPendingBuy(null)}
+      />
+
+      {/* Manual Edit Listing Price Dialog */}
+      <DsDialog
+        open={Boolean(editingListing)}
+        onClose={() => !listingActionBusy && setEditingListing(null)}
+        maxWidthClass="max-w-md"
+      >
+        {editingListing && (
+          <div className="px-box overflow-hidden text-[var(--ink)] shadow-2xl">
+            <div className="bg-gradient-to-b from-[#2563eb] to-[#1d4ed8] border-b-[1.5px] border-[#1b1f26] px-4 py-3 flex items-center justify-between gap-2">
+              <span className="font-bold text-sm text-white truncate">
+                Editar Anúncio #{editingListing.id}
+              </span>
+              <button
+                type="button"
+                disabled={listingActionBusy}
+                onClick={() => setEditingListing(null)}
+                className="ds-btn ds-btn-red ds-btn-sm !px-2"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-xs">
+              <div className="font-bold text-[var(--ink)]">{editingListing.label}</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[var(--ink-muted)] font-semibold mb-1">
+                    Novo Preço Unitário
+                  </label>
+                  <input
+                    type="number"
+                    min={2}
+                    value={editingListing.price}
+                    onChange={(e) =>
+                      setEditingListing({ ...editingListing, price: Number(e.target.value) })
+                    }
+                    className="ds-input w-full px-2.5 py-1.5 font-mono-num"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[var(--ink-muted)] font-semibold mb-1">Moeda</label>
+                  <select
+                    value={editingListing.shinyPokemon ? "orb" : editingListing.moeda}
+                    disabled={editingListing.shinyPokemon}
+                    onChange={(e) =>
+                      setEditingListing({
+                        ...editingListing,
+                        moeda: e.target.value as "gold" | "orb",
+                      })
+                    }
+                    className="ds-input w-full px-2.5 py-1.5 font-semibold disabled:opacity-60"
+                  >
+                    <option value="gold">Ouro (Gold)</option>
+                    <option value="orb">Gemas (Orbs)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={listingActionBusy}
+                  onClick={() => setEditingListing(null)}
+                  className="ds-btn ds-btn-slate ds-btn-sm"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  disabled={listingActionBusy}
+                  onClick={handleConfirmEditListing}
+                  className="ds-btn ds-btn-green ds-btn-sm"
+                >
+                  {listingActionBusy ? "Salvando..." : "Salvar Preço"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </DsDialog>
+
+      <DsConfirmDialog
+        open={Boolean(cancelingListing)}
+        title={`Cancelar anúncio #${cancelingListing?.id || ""}?`}
+        description={`Remover "${cancelingListing?.label || ""}" do mercado usando ${activeBuyer?.nick || ""}? O item ou Pokémon voltará para sua conta.`}
+        confirmLabel="Cancelar Anúncio"
+        tone="danger"
+        busy={listingActionBusy}
+        onConfirm={handleConfirmCancelListing}
+        onClose={() => setCancelingListing(null)}
       />
     </div>
   );

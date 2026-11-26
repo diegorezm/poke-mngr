@@ -255,6 +255,8 @@ type GlobalSettings struct {
 	CardStyle             string  `json:"cardStyle"` // padrao | medalhao | versus | corrida
 	Language              string  `json:"language"`  // pt | en
 	SniperEnabled         bool    `json:"sniperEnabled"`
+	AutoSellEnabled       bool    `json:"autoSellEnabled"`
+	AutoSellDryRun        bool    `json:"autoSellDryRun"`
 	MarketSellAlert       bool    `json:"marketSellAlert"`
 	MarketSellAlertPct    int     `json:"marketSellAlertPct"`
 	DeckLayout            string  `json:"deckLayout"` // grid | columns | focus
@@ -276,6 +278,8 @@ func DefaultGlobalSettings() GlobalSettings {
 		CardStyle:             "padrao",
 		Language:              "pt",
 		SniperEnabled:         false,
+		AutoSellEnabled:       false,
+		AutoSellDryRun:        false,
 		MarketSellAlert:       false,
 		MarketSellAlertPct:    30,
 		DeckLayout:            "grid",

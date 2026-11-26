@@ -8,6 +8,7 @@ export {
 export type {
     AccountTelemetry,
     ActivePokemonSheet,
+    AutoSellPreviewItem,
     BlockInfo,
     ChatAdLink,
     ChatEvent,
@@ -26,6 +27,7 @@ export type {
     InventorySummary,
     InventoryValuation,
     ListingDetail,
+    MarketActionResult,
     MarketBuyResult,
     OutlandTier,
     PassSnapshot,

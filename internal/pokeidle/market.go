@@ -32,6 +32,26 @@ type MarketBuyResult struct {
 	Moeda  string `json:"moeda,omitempty"`
 }
 
+type MarketActionResult struct {
+	Status string `json:"status"` // ok | recusado | limite | timeout
+	Detail string `json:"detail"`
+}
+
+type pendingMarketAction struct {
+	kind string // "create" | "edit" | "cancel"
+	ch   chan MarketActionResult
+}
+
+type CreateListingRequest struct {
+	Tipo      string `json:"tipo"` // "item" | "pokemon"
+	ItemID    int    `json:"itemId,omitempty"`
+	PokemonID int    `json:"pokemonId,omitempty"`
+	Qty       int    `json:"qtd"`
+	Price     int64  `json:"preco"`
+	Moeda     string `json:"moeda"` // "gold" | "orb"
+	Days      int    `json:"dias,omitempty"`
+}
+
 type pendingBuy struct {
 	listingID int
 	qty       int
@@ -51,11 +71,13 @@ type MarketClient struct {
 
 	reqMu    sync.Mutex
 	lastSent time.Time
+	actionMu sync.Mutex
 
-	mu     sync.Mutex
-	waiter *marketWaiter
-	buys   []*pendingBuy
-	seq    int
+	mu            sync.Mutex
+	waiter        *marketWaiter
+	buys          []*pendingBuy
+	pendingAction *pendingMarketAction
+	seq           int
 
 	clockMu  sync.Mutex
 	samples  []clockSample
@@ -88,6 +110,13 @@ func (mc *MarketClient) Reset(reason string) {
 		}
 	}
 	mc.buys = nil
+	if mc.pendingAction != nil {
+		select {
+		case mc.pendingAction.ch <- MarketActionResult{Status: "recusado", Detail: reason}:
+		default:
+		}
+		mc.pendingAction = nil
+	}
 }
 
 func (mc *MarketClient) NoteServerTime(agoraMs int64) {
@@ -160,9 +189,16 @@ func (mc *MarketClient) HandleFrame(msg map[string]any) {
 		}
 		mc.mu.Unlock()
 	case "erro":
+		detail := asString(msg["msg"])
+		if detail == "" {
+			detail = asString(msg["chave"])
+		}
+		if mc.settleAnyAction(MarketActionResult{Status: "recusado", Detail: detail}) {
+			return
+		}
 		mc.settleOldest("enviada", MarketBuyResult{
 			Status: "recusado",
-			Detail: asString(msg["chave"]),
+			Detail: detail,
 		})
 	case "batalha":
 		for _, raw := range asSlice(msg["ev"]) {
@@ -172,6 +208,21 @@ func (mc *MarketClient) HandleFrame(msg map[string]any) {
 			}
 			k := asString(ev["k"])
 			switch k {
+			case "marketCriado":
+				mc.settleActionKind("create", MarketActionResult{
+					Status: "ok",
+					Detail: asString(ev["descricao"]),
+				})
+			case "marketCancelado":
+				mc.settleActionKind("cancel", MarketActionResult{
+					Status: "ok",
+					Detail: "Anúncio cancelado",
+				})
+			case "marketLimitePokemon":
+				mc.settleActionKind("create", MarketActionResult{
+					Status: "limite",
+					Detail: fmt.Sprintf("Limite de anúncios de Pokémon atingido (%d)", asInt(ev["max"])),
+				})
 			case "marketComprado":
 				mc.settleOldest("sorteio", MarketBuyResult{
 					Status: "comprado",
@@ -193,12 +244,46 @@ func (mc *MarketClient) HandleFrame(msg map[string]any) {
 					mc.markSorteio()
 				} else if m == "market.sorteioPerdeu" {
 					mc.settleOldest("sorteio", MarketBuyResult{Status: "perdeu_sorteio", Detail: "Perdeu o sorteio"})
-				} else if strings.HasPrefix(m, "market.") || strings.Contains(low, "anúncio já saiu") || strings.Contains(low, "só restam") {
-					mc.settleOldest("enviada", MarketBuyResult{Status: "recusado", Detail: m})
+				} else if m == "market.editado" || strings.Contains(low, "preço atualizado") || strings.Contains(low, "anúncio atualizado") {
+					mc.settleActionKind("edit", MarketActionResult{Status: "ok", Detail: m})
+				} else if strings.HasPrefix(m, "market.") || strings.Contains(low, "anúncio já saiu") || strings.Contains(low, "só restam") || strings.Contains(low, "espera") || strings.Contains(low, "retenção") {
+					if !mc.settleAnyAction(MarketActionResult{Status: "recusado", Detail: m}) {
+						mc.settleOldest("enviada", MarketBuyResult{Status: "recusado", Detail: m})
+					}
 				}
 			}
 		}
 	}
+}
+
+func (mc *MarketClient) settleActionKind(kind string, res MarketActionResult) bool {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	if mc.pendingAction == nil || mc.pendingAction.kind != kind {
+		return false
+	}
+	act := mc.pendingAction
+	mc.pendingAction = nil
+	select {
+	case act.ch <- res:
+	default:
+	}
+	return true
+}
+
+func (mc *MarketClient) settleAnyAction(res MarketActionResult) bool {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	if mc.pendingAction == nil {
+		return false
+	}
+	act := mc.pendingAction
+	mc.pendingAction = nil
+	select {
+	case act.ch <- res:
+	default:
+	}
+	return true
 }
 
 func (mc *MarketClient) markSorteio() {
@@ -439,6 +524,154 @@ func (mc *MarketClient) removeBuy(pb *pendingBuy) {
 	}
 }
 
+// CreateListing publishes an item or Pokémon on the community market (market.criar).
+func (mc *MarketClient) CreateListing(ctx context.Context, req CreateListingRequest) (MarketActionResult, error) {
+	mc.actionMu.Lock()
+	defer mc.actionMu.Unlock()
+
+	moeda := req.Moeda
+	if moeda != "orb" {
+		moeda = "gold"
+	}
+	qty := req.Qty
+	if req.Tipo == "pokemon" || qty <= 0 {
+		qty = 1
+	}
+	if req.Price < 2 {
+		return MarketActionResult{Status: "recusado", Detail: "preço unitário abaixo do mínimo"}, errors.New("preço inválido")
+	}
+
+	payload := map[string]any{
+		"t":           "market.criar",
+		"tipo":        req.Tipo,
+		"itemId":      nil,
+		"pokemonId":   nil,
+		"casaId":      nil,
+		"bicicletaId": nil,
+		"qtd":         qty,
+		"preco":       req.Price,
+		"moeda":       moeda,
+		"dias":        nil,
+	}
+	if req.Tipo == "pokemon" {
+		if req.PokemonID <= 0 {
+			return MarketActionResult{Status: "recusado", Detail: "pokemonId inválido"}, errors.New("pokemonId inválido")
+		}
+		days := req.Days
+		if days < 1 {
+			days = 3
+		}
+		if days > 30 {
+			days = 30
+		}
+		payload["pokemonId"] = req.PokemonID
+		payload["dias"] = days
+	} else {
+		if req.ItemID <= 0 {
+			return MarketActionResult{Status: "recusado", Detail: "itemId inválido"}, errors.New("itemId inválido")
+		}
+		payload["tipo"] = "item"
+		payload["itemId"] = req.ItemID
+	}
+
+	return mc.sendActionAndWait(ctx, "create", payload, marketReqTimeout)
+}
+
+// CancelListing cancels an open market listing (market.cancelar).
+func (mc *MarketClient) CancelListing(ctx context.Context, listingID int) (MarketActionResult, error) {
+	mc.actionMu.Lock()
+	defer mc.actionMu.Unlock()
+	if listingID <= 0 {
+		return MarketActionResult{Status: "recusado", Detail: "ID inválido"}, errors.New("ID inválido")
+	}
+	return mc.sendActionAndWait(ctx, "cancel", map[string]any{
+		"t":  "market.cancelar",
+		"id": listingID,
+	}, marketReqTimeout)
+}
+
+// EditListing updates the price/currency of an existing listing (market.editar) and verifies via market.meus if silent.
+func (mc *MarketClient) EditListing(ctx context.Context, listingID int, price int64, moeda string) (MarketActionResult, error) {
+	mc.actionMu.Lock()
+	defer mc.actionMu.Unlock()
+	if listingID <= 0 || price < 2 {
+		return MarketActionResult{Status: "recusado", Detail: "parâmetros inválidos"}, errors.New("parâmetros inválidos")
+	}
+	if moeda != "orb" {
+		moeda = "gold"
+	}
+
+	res, err := mc.sendActionAndWait(ctx, "edit", map[string]any{
+		"t":     "market.editar",
+		"id":    listingID,
+		"preco": price,
+		"moeda": moeda,
+	}, 3*time.Second)
+	if err != nil {
+		return res, err
+	}
+	if res.Status == "ok" || res.Status == "recusado" {
+		return res, nil
+	}
+
+	// Server may apply market.editar silently without a battle toast; confirm via market.meus.
+	meus, qErr := mc.QueryMyListings(ctx)
+	if qErr != nil {
+		return MarketActionResult{Status: "timeout", Detail: "sem confirmação após editar anúncio"}, qErr
+	}
+	for _, raw := range asSlice(meus["linhas"]) {
+		ad := asMap(raw)
+		if ad == nil || asInt(ad["id"]) != listingID {
+			continue
+		}
+		adMoeda := asString(ad["moeda"])
+		if adMoeda == "" {
+			adMoeda = "gold"
+		}
+		if asInt64(ad["preco"]) == price && adMoeda == moeda {
+			return MarketActionResult{Status: "ok", Detail: "Preço atualizado"}, nil
+		}
+		return MarketActionResult{Status: "recusado", Detail: "O servidor manteve o preço anterior (pode estar em cooldown de edição)"}, nil
+	}
+	return MarketActionResult{Status: "recusado", Detail: "Anúncio não encontrado (pode ter sido vendido ou encerrado)"}, nil
+}
+
+func (mc *MarketClient) sendActionAndWait(ctx context.Context, kind string, payload map[string]any, timeout time.Duration) (MarketActionResult, error) {
+	act := &pendingMarketAction{
+		kind: kind,
+		ch:   make(chan MarketActionResult, 1),
+	}
+	mc.mu.Lock()
+	mc.pendingAction = act
+	mc.mu.Unlock()
+
+	cleanup := func() {
+		mc.mu.Lock()
+		if mc.pendingAction == act {
+			mc.pendingAction = nil
+		}
+		mc.mu.Unlock()
+	}
+
+	if err := mc.sendFn(ctx, payload); err != nil {
+		cleanup()
+		return MarketActionResult{Status: "recusado", Detail: err.Error()}, err
+	}
+
+	wctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	select {
+	case res := <-act.ch:
+		return res, nil
+	case <-wctx.Done():
+		cleanup()
+		if ctx.Err() != nil {
+			return MarketActionResult{Status: "timeout", Detail: ctx.Err().Error()}, ctx.Err()
+		}
+		return MarketActionResult{Status: "timeout", Detail: "Sem confirmação do mercado"}, nil
+	}
+}
+
 // --- MarketService (shared across accounts + pokeidleguide.io analytics + Valuation + Sniper) ---
 
 type ListingDetail struct {
@@ -509,8 +742,10 @@ type MarketService struct {
 	usdPerGem    float64
 	usdPerGemAt  time.Time
 	shinyCache   map[string]shinyPriceCacheEntry
-	sellAlerted  map[string]sellAlertEntry
-	lastSellTick time.Time
+	sellAlerted      map[string]sellAlertEntry
+	lastSellTick     time.Time
+	lastAutoSellTick time.Time
+	pokeMedianCache  map[string]shinyPriceCacheEntry
 }
 
 type guideCacheEntry struct {
@@ -526,8 +761,9 @@ func NewMarketService(mgr *AccountManager, st *store.Store) *MarketService {
 		guideCache:  map[string]guideCacheEntry{},
 		seenAlerted: map[string]time.Time{},
 		snipedIDs:   map[int]time.Time{},
-		shinyCache:  map[string]shinyPriceCacheEntry{},
-		sellAlerted: map[string]sellAlertEntry{},
+		shinyCache:      map[string]shinyPriceCacheEntry{},
+		sellAlerted:     map[string]sellAlertEntry{},
+		pokeMedianCache: map[string]shinyPriceCacheEntry{},
 	}
 }
 
@@ -600,13 +836,16 @@ func (ms *MarketService) Overview(ctx context.Context) (map[string]any, error) {
 	}
 	conn.mu.RUnlock()
 
+	gs := ms.mgr.Settings()
 	return map[string]any{
-		"resumo":        resumo,
-		"medias":        mediasMap,
-		"itemsMeta":     itemsMeta,
-		"favs":          favs,
-		"sniperEnabled": ms.mgr.Settings().SniperEnabled,
-		"accountNick":   conn.Account().Nick,
+		"resumo":          resumo,
+		"medias":          mediasMap,
+		"itemsMeta":       itemsMeta,
+		"favs":            favs,
+		"sniperEnabled":   gs.SniperEnabled,
+		"autoSellEnabled": gs.AutoSellEnabled,
+		"autoSellDryRun":  gs.AutoSellDryRun,
+		"accountNick":     conn.Account().Nick,
 	}, nil
 }
 
@@ -1166,6 +1405,7 @@ func (ms *MarketService) RunRuleLoop(ctx context.Context) {
 		case <-ticker.C:
 			ms.tickSellAlerts(ctx)
 			ms.tickRules(ctx)
+			ms.tickAutoSell(ctx)
 		}
 	}
 }
@@ -1197,6 +1437,11 @@ func (ms *MarketService) pruneCaches(now time.Time) {
 	for k, e := range ms.sellAlerted {
 		if now.Sub(e.at) > dedupeTTL {
 			delete(ms.sellAlerted, k)
+		}
+	}
+	for k, e := range ms.pokeMedianCache {
+		if !now.Before(e.exp) {
+			delete(ms.pokeMedianCache, k)
 		}
 	}
 }

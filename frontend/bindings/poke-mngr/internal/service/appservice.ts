@@ -44,6 +44,10 @@ export function BuyMarketListing(accountID: number, listingID: number, qty: numb
     return $Call.ByID(3567604289, accountID, listingID, qty, price, moeda);
 }
 
+export function CancelMarketListing(accountID: number, listingID: number): $CancellablePromise<pokeidle$0.MarketActionResult> {
+    return $Call.ByID(1500638225, accountID, listingID);
+}
+
 export function CancelPendingHunt(accountID: number): $CancellablePromise<void> {
     return $Call.ByID(1645689331, accountID);
 }
@@ -74,6 +78,14 @@ export function DeleteAccount(id: number): $CancellablePromise<void> {
 
 export function DeleteMarketRule(id: number): $CancellablePromise<void> {
     return $Call.ByID(3118481972, id);
+}
+
+export function DeleteMarketSellRule(id: number): $CancellablePromise<void> {
+    return $Call.ByID(1249674580, id);
+}
+
+export function EditMarketListing(accountID: number, listingID: number, price: number, moeda: string): $CancellablePromise<pokeidle$0.MarketActionResult> {
+    return $Call.ByID(2268369471, accountID, listingID, price, moeda);
 }
 
 export function EquipItem(accountID: number, kind: string, itemID: number): $CancellablePromise<void> {
@@ -196,6 +208,10 @@ export function ListMarketRules(): $CancellablePromise<store$0.MarketRule[] | nu
     return $Call.ByID(2529045744);
 }
 
+export function ListMarketSellRules(): $CancellablePromise<store$0.MarketSellRule[] | null> {
+    return $Call.ByID(2708822192);
+}
+
 export function ListPokemons(accountID: number, sortBy: string): $CancellablePromise<pokeidle$0.PokemonDetail[] | null> {
     return $Call.ByID(3487829067, accountID, sortBy);
 }
@@ -222,6 +238,10 @@ export function OpenLivePointsPage(site: string, channel: string): $CancellableP
 
 export function ParseImportText(raw: string): $CancellablePromise<$models.ImportParsed> {
     return $Call.ByID(318904690, raw);
+}
+
+export function PreviewAutoSell(ruleID: number): $CancellablePromise<pokeidle$0.AutoSellPreviewItem[] | null> {
+    return $Call.ByID(1069168600, ruleID);
 }
 
 export function PvpQueueAction(accountID: number, enter: boolean): $CancellablePromise<void> {
@@ -252,6 +272,10 @@ export function SaveMarketRule(rule: store$0.MarketRule): $CancellablePromise<st
     return $Call.ByID(4161522254, rule);
 }
 
+export function SaveMarketSellRule(rule: store$0.MarketSellRule): $CancellablePromise<store$0.MarketSellRule> {
+    return $Call.ByID(4069588274, rule);
+}
+
 export function SavePvpTeam(accountID: number, pokemonIDs: number[] | null, houses: { [_ in string]?: number } | null): $CancellablePromise<void> {
     return $Call.ByID(541050583, accountID, pokemonIDs, houses);
 }
@@ -274,6 +298,10 @@ export function SendChatMessage(accountID: number, canal: string, texto: string)
 
 export function SendDailyReportNow(webhookURL: string): $CancellablePromise<void> {
     return $Call.ByID(3946729542, webhookURL);
+}
+
+export function SetAutoSellConfig(enabled: boolean, dryRun: boolean): $CancellablePromise<void> {
+    return $Call.ByID(2370270258, enabled, dryRun);
 }
 
 export function SetAutostart(enabled: boolean): $CancellablePromise<void> {
@@ -318,6 +346,10 @@ export function ToggleMarketFav(itemID: number): $CancellablePromise<boolean> {
 
 export function ToggleMarketRule(id: number): $CancellablePromise<boolean> {
     return $Call.ByID(2116195687, id);
+}
+
+export function ToggleMarketSellRule(id: number): $CancellablePromise<boolean> {
+    return $Call.ByID(1497990879, id);
 }
 
 export function UpdateAccount(acc: config$0.AccountRecord): $CancellablePromise<config$0.AccountRecord> {
